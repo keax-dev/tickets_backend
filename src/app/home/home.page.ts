@@ -58,6 +58,7 @@ export class HomePage {
         this.zone.run(() => {
           this.watchId = null;
           this.watchCoordinate = null;
+          this.coordinate = null;
         });
       }).catch((error) => {
         console.log('Error clearing watch:', error);
@@ -67,5 +68,10 @@ export class HomePage {
 
   toggleNames() {
     this.showNames = !this.showNames;
+  }
+  
+  setCoordinates() {
+    this.getCurrentCoordinate();
+    this.watchPosition();
   }
 }
