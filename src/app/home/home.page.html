@@ -1,20 +1,77 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
+<ion-header>
+  <ion-toolbar color="success">
     <ion-title>
-      Blank
+      Capacitor Geolocation
     </ion-title>
   </ion-toolbar>
 </ion-header>
 
-<ion-content [fullscreen]="true">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">Blank</ion-title>
-    </ion-toolbar>
-  </ion-header>
+<ion-content class="ion-padding">
+  <ion-button size="small" color="success" (click)="requestPermissions()">
+    Geolocation Permissions
+  </ion-button>
 
-  <div id="container">
-    <strong>Ready to create an app?</strong>
-    <p>Start with Ionic <a target="_blank" rel="noopener noreferrer" href="https://ionicframework.com/docs/components">UI Components</a></p>
+  <ion-card>
+    <ion-card-header>
+      <ion-button size="small" color="success" (click)="getCurrentCoordinate()">
+        Current Coordinate
+      </ion-button>
+    </ion-card-header>
+    <ion-card-content>
+      Lat: {{coordinate?.latitude}}
+      Long: {{coordinate?.longitude}}
+    </ion-card-content>
+  </ion-card>
+
+  <ion-card>
+    <ion-card-header>
+      <ion-button size="small" color="success" (click)="watchPosition()">
+        Watch Position
+      </ion-button>
+    </ion-card-header>
+    <ion-card-content>
+      Lat: {{watchCoordinate?.latitude}}
+      Long: {{watchCoordinate?.longitude}}
+    </ion-card-content>
+  </ion-card>
+
+  <ion-button size="small" color="success" (click)="clearWatch()">Clear Watch</ion-button>
+
+  <div class="rectangle" *ngIf="showNames">
+    <div class="joss-section">
+      <span class="name">Joselyn Correa</span>
+    </div>
+
+    <div class="kewin-section">
+      <span class="name">Kevin Galarza</span>
+    </div>
   </div>
+
+  <ion-button size="small" color="success" (click)="toggleNames()">Integrantes</ion-button>
 </ion-content>
+
+<style>
+  .rectangle {
+    background-color: wheat;
+    margin-top: 30px;
+    padding: 20px;
+    text-align: center;
+    width: max-content;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .joss-section {
+    color: black;
+    font-weight: bold;
+  }
+
+  .kewin-section {
+    color: black;
+    font-weight: bold;
+  }
+
+  .name {
+    font-size: 18px;
+  }
+</style>
