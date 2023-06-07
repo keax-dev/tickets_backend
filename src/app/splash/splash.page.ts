@@ -27,7 +27,7 @@ export class SplashPage implements OnInit, OnDestroy {
     const ionContent = document.querySelector('ion-content');
     this.interval = setInterval(() => {
       ionContent?.style.setProperty('--background', this.getRandomColor());
-    }, 100);
+    }, 300);
   }
 
   getRandomColor() {
