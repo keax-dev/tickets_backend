@@ -19,6 +19,7 @@ import com.tickets.managementtickets.shared.application.port.HashingService;
 import com.tickets.managementtickets.shared.application.exception.ConflictException;
 import com.tickets.managementtickets.shared.application.exception.ForbiddenException;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
+import com.tickets.managementtickets.shared.application.exception.UnauthorizedException;
 import com.tickets.managementtickets.shared.application.exception.ValidationException;
 import com.tickets.managementtickets.sla.infrastructure.persistence.entity.SlaPolicyEntity;
 import com.tickets.managementtickets.sla.infrastructure.persistence.repository.SlaPolicyRepository;
@@ -160,6 +161,12 @@ public class TicketService {
             throw new ValidationException("IDEMPOTENCY_KEY_REQUIRED", "The idempotency key is required.");
         }
 
+        UserEntity requester = userRepository.findById(currentUser.id())
+            .orElseThrow(() -> new UnauthorizedException(
+                "AUTHENTICATED_USER_NOT_FOUND",
+                "The authenticated user no longer exists. Please sign in again."
+            ));
+
         String requestHash = hashingService.hash(currentUser.id() + "|" + normalize(request.title()) + "|" + normalize(request.description()) + "|" + request.categoryId() + "|" + request.priority().name());
         Optional<IdempotencyRecordEntity> existingRecord = idempotencyRecordRepository.findByIdempotencyKeyAndUserId(idempotencyKey, currentUser.id());
         if (existingRecord.isPresent()) {
@@ -180,7 +187,7 @@ public class TicketService {
         ticket.setDescription(normalize(request.description()));
         ticket.setStatus(TicketStatus.CREATED);
         ticket.setPriority(request.priority());
-        ticket.setRequesterId(currentUser.id());
+        ticket.setRequesterId(requester.getId());
         ticket.setCategoryId(category.getId());
         ticket.setFirstResponseDueAt(now.plus(slaPolicy.getFirstResponseHours(), ChronoUnit.HOURS));
         ticket.setResolutionDueAt(now.plus(slaPolicy.getResolutionHours(), ChronoUnit.HOURS));
@@ -814,7 +821,11 @@ public class TicketService {
     }
 
     private TicketDetailResponse toDetailResponse(TicketEntity ticket, AuthenticatedUser currentUser) {
-        Map<String, UserEntity> usersById = loadUsersById(List.of(ticket.getRequesterId(), ticket.getAssignedAgentId()));
+        Map<String, UserEntity> usersById = loadUsersById(
+            java.util.stream.Stream.of(ticket.getRequesterId(), ticket.getAssignedAgentId())
+                .filter(Objects::nonNull)
+                .toList()
+        );
         Map<String, CategoryEntity> categoriesById = loadCategoriesById(List.of(ticket.getCategoryId()));
         return new TicketDetailResponse(
             ticket.getId(),

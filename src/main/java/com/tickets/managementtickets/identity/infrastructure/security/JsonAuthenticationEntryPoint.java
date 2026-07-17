@@ -11,8 +11,10 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class JsonAuthenticationEntryPoint implements org.springframework.security.web.AuthenticationEntryPoint {
@@ -31,15 +33,24 @@ public class JsonAuthenticationEntryPoint implements org.springframework.securit
     ) throws IOException, ServletException {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        objectMapper.writeValue(response.getOutputStream(), Map.of(
-            "type", "https://management-tickets/errors/unauthorized",
-            "title", "Unauthorized",
-            "status", HttpStatus.UNAUTHORIZED.value(),
-            "detail", "Authentication is required.",
-            "code", "UNAUTHORIZED",
-            "correlationId", request.getAttribute(CorrelationIdFilter.CORRELATION_ID_ATTRIBUTE),
-            "timestamp", Instant.now(),
-            "fieldErrors", List.of()
-        ));
+        String correlationId = resolveCorrelationId(request);
+        response.setHeader(CorrelationIdFilter.CORRELATION_ID_HEADER, correlationId);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", "https://management-tickets/errors/unauthorized");
+        body.put("title", "Unauthorized");
+        body.put("status", HttpStatus.UNAUTHORIZED.value());
+        body.put("detail", "Authentication is required.");
+        body.put("code", "UNAUTHORIZED");
+        body.put("correlationId", correlationId);
+        body.put("timestamp", Instant.now());
+        body.put("fieldErrors", List.of());
+
+        objectMapper.writeValue(response.getOutputStream(), body);
+    }
+
+    private String resolveCorrelationId(HttpServletRequest request) {
+        Object correlationId = request.getAttribute(CorrelationIdFilter.CORRELATION_ID_ATTRIBUTE);
+        return correlationId == null ? UUID.randomUUID().toString() : correlationId.toString();
     }
 }
