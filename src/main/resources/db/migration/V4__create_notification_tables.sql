@@ -6,9 +6,9 @@ CREATE TABLE notifications (
     message VARCHAR(1000) NOT NULL,
     related_ticket_id VARCHAR(36) NULL,
     is_read BIT(1) NOT NULL DEFAULT b'0',
-    read_at TIMESTAMP NULL,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL,
+    read_at TIMESTAMP(6) NULL DEFAULT NULL,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT fk_notifications_user FOREIGN KEY (recipient_id) REFERENCES users(id),
     CONSTRAINT fk_notifications_ticket FOREIGN KEY (related_ticket_id) REFERENCES tickets(id)
