@@ -1,37 +1,33 @@
 package com.tickets.managementtickets.identity.application.service;
 
+import com.tickets.managementtickets.identity.application.model.AuthCookie;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.application.port.AccessTokenService;
 import com.tickets.managementtickets.identity.application.port.AuthSecuritySettings;
 import com.tickets.managementtickets.identity.application.port.CurrentAuthenticatedUserProvider;
+import com.tickets.managementtickets.identity.application.port.RefreshTokenRepositoryPort;
 import com.tickets.managementtickets.identity.application.port.RefreshTokenGenerator;
+import com.tickets.managementtickets.identity.application.port.UserRepositoryPort;
 import com.tickets.managementtickets.identity.domain.model.Permission;
+import com.tickets.managementtickets.identity.domain.model.RefreshToken;
 import com.tickets.managementtickets.identity.domain.model.Role;
-import com.tickets.managementtickets.identity.infrastructure.persistence.entity.RefreshTokenEntity;
-import com.tickets.managementtickets.identity.infrastructure.persistence.entity.UserEntity;
-import com.tickets.managementtickets.identity.infrastructure.persistence.repository.RefreshTokenRepository;
-import com.tickets.managementtickets.identity.infrastructure.persistence.repository.UserRepository;
+import com.tickets.managementtickets.identity.domain.model.User;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.exception.UnauthorizedException;
 import com.tickets.managementtickets.shared.application.port.HashingService;
-import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
-import org.springframework.http.ResponseCookie;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import com.tickets.managementtickets.shared.application.port.PasswordHashingService;
+import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
-@Service
 public class AuthService {
 
-    private final UserRepository userRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final UserRepositoryPort userRepository;
+    private final RefreshTokenRepositoryPort refreshTokenRepository;
+    private final PasswordHashingService passwordHashingService;
     private final RolePermissionService rolePermissionService;
     private final AccessTokenService accessTokenService;
     private final RefreshTokenGenerator refreshTokenGenerator;
@@ -39,12 +35,12 @@ public class AuthService {
     private final HashingService hashingService;
     private final CurrentAuthenticatedUserProvider currentUserProvider;
     private final Clock clock;
-    private final Environment environment;
+    private final TransactionRunner transactionRunner;
 
     public AuthService(
-        UserRepository userRepository,
-        RefreshTokenRepository refreshTokenRepository,
-        PasswordEncoder passwordEncoder,
+        UserRepositoryPort userRepository,
+        RefreshTokenRepositoryPort refreshTokenRepository,
+        PasswordHashingService passwordHashingService,
         RolePermissionService rolePermissionService,
         AccessTokenService accessTokenService,
         RefreshTokenGenerator refreshTokenGenerator,
@@ -52,11 +48,11 @@ public class AuthService {
         HashingService hashingService,
         CurrentAuthenticatedUserProvider currentUserProvider,
         Clock clock,
-        Environment environment
+        TransactionRunner transactionRunner
     ) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
-        this.passwordEncoder = passwordEncoder;
+        this.passwordHashingService = passwordHashingService;
         this.rolePermissionService = rolePermissionService;
         this.accessTokenService = accessTokenService;
         this.refreshTokenGenerator = refreshTokenGenerator;
@@ -64,97 +60,90 @@ public class AuthService {
         this.hashingService = hashingService;
         this.currentUserProvider = currentUserProvider;
         this.clock = clock;
-        this.environment = environment;
+        this.transactionRunner = transactionRunner;
     }
 
-    @Transactional
     public AuthResult login(String email, String password) {
-        UserEntity user = userRepository.findByEmail(normalizeEmail(email))
-            .orElseThrow(() -> new UnauthorizedException("INVALID_CREDENTIALS", "Invalid credentials."));
+        return transactionRunner.required(() -> {
+            User user = userRepository.findByEmail(normalizeEmail(email))
+                .orElseThrow(() -> new UnauthorizedException("INVALID_CREDENTIALS", "Invalid credentials."));
 
-        if (!user.isActive()) {
-            throw new UnauthorizedException("USER_INACTIVE", "The user is inactive.");
-        }
+            if (!user.active()) {
+                throw new UnauthorizedException("USER_INACTIVE", "The user is inactive.");
+            }
 
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            user.setFailedLoginAttempts(user.getFailedLoginAttempts() + 1);
-            throw new UnauthorizedException("INVALID_CREDENTIALS", "Invalid credentials.");
-        }
+            if (!passwordHashingService.matches(password, user.passwordHash())) {
+                userRepository.save(user.recordFailedLogin());
+                throw new UnauthorizedException("INVALID_CREDENTIALS", "Invalid credentials.");
+            }
 
-        user.setFailedLoginAttempts(0);
-        user.setLastLoginAt(clock.instant());
-        return issueTokens(buildAuthenticatedUser(user), null);
+            User loggedInUser = userRepository.save(user.recordSuccessfulLogin(clock.instant()));
+            return issueTokens(buildAuthenticatedUser(loggedInUser), null);
+        });
     }
 
-    @Transactional
     public AuthResult refresh(String rawRefreshToken) {
-        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
-            throw new UnauthorizedException("REFRESH_TOKEN_MISSING", "A refresh token is required.");
-        }
+        return transactionRunner.required(() -> {
+            if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+                throw new UnauthorizedException("REFRESH_TOKEN_MISSING", "A refresh token is required.");
+            }
 
-        String tokenHash = hashingService.hash(rawRefreshToken);
-        RefreshTokenEntity existingToken = refreshTokenRepository.findByTokenHash(tokenHash)
-            .orElseThrow(() -> new UnauthorizedException("INVALID_REFRESH_TOKEN", "The refresh token is invalid."));
+            String tokenHash = hashingService.hash(rawRefreshToken);
+            RefreshToken existingToken = refreshTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new UnauthorizedException("INVALID_REFRESH_TOKEN", "The refresh token is invalid."));
 
-        if (existingToken.getRevokedAt() != null) {
-            throw new UnauthorizedException("REFRESH_TOKEN_REVOKED", "The refresh token has already been revoked.");
-        }
-        if (existingToken.getExpiresAt().isBefore(clock.instant())) {
-            throw new UnauthorizedException("REFRESH_TOKEN_EXPIRED", "The refresh token has expired.");
-        }
+            if (existingToken.revokedAt() != null) {
+                throw new UnauthorizedException("REFRESH_TOKEN_REVOKED", "The refresh token has already been revoked.");
+            }
+            if (existingToken.expiresAt().isBefore(clock.instant())) {
+                throw new UnauthorizedException("REFRESH_TOKEN_EXPIRED", "The refresh token has expired.");
+            }
 
-        UserEntity user = userRepository.findById(existingToken.getUserId())
-            .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "The user could not be found."));
+            User user = userRepository.findById(existingToken.userId())
+                .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "The user could not be found."));
 
-        if (!user.isActive()) {
-            throw new UnauthorizedException("USER_INACTIVE", "The user is inactive.");
-        }
+            if (!user.active()) {
+                throw new UnauthorizedException("USER_INACTIVE", "The user is inactive.");
+            }
 
-        return issueTokens(buildAuthenticatedUser(user), existingToken);
+            return issueTokens(buildAuthenticatedUser(user), existingToken);
+        });
     }
 
-    @Transactional
     public void logout(String rawRefreshToken) {
-        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
-            return;
-        }
+        transactionRunner.required(() -> {
+            if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+                return;
+            }
 
-        refreshTokenRepository.findByTokenHash(hashingService.hash(rawRefreshToken))
-            .ifPresent(token -> token.setRevokedAt(clock.instant()));
+            refreshTokenRepository.findByTokenHash(hashingService.hash(rawRefreshToken))
+                .ifPresent(token -> refreshTokenRepository.save(token.revoke(clock.instant())));
+        });
     }
 
-    @Transactional(readOnly = true)
     public UserResponse me() {
-        return toUserResponse(currentUserProvider.requireCurrentUser());
+        return transactionRunner.readOnly(() -> toUserResponse(currentUserProvider.requireCurrentUser()));
     }
 
-    public ResponseCookie clearRefreshCookie() {
-        return ResponseCookie.from(securityProperties.getRefreshCookieName(), "")
-            .httpOnly(true)
-            .secure(isProduction())
-            .sameSite("Lax")
-            .path("/api/v1/auth")
-            .maxAge(0)
-            .build();
+    public AuthCookie clearRefreshCookie() {
+        return refreshCookie("", 0);
     }
 
-    @Transactional
     public void purgeExpiredRefreshTokens() {
-        refreshTokenRepository.deleteByExpiresAtBefore(clock.instant());
+        transactionRunner.required(() -> refreshTokenRepository.deleteByExpiresAtBefore(clock.instant()));
     }
 
-    private AuthResult issueTokens(AuthenticatedUser user, RefreshTokenEntity previousToken) {
+    private AuthResult issueTokens(AuthenticatedUser user, RefreshToken previousToken) {
         String rawRefreshToken = refreshTokenGenerator.generateToken();
 
-        RefreshTokenEntity newRefreshToken = new RefreshTokenEntity();
-        newRefreshToken.setUserId(user.id());
-        newRefreshToken.setTokenHash(hashingService.hash(rawRefreshToken));
-        newRefreshToken.setExpiresAt(clock.instant().plus(securityProperties.getRefreshTokenExpirationDays(), ChronoUnit.DAYS));
-        refreshTokenRepository.save(newRefreshToken);
+        RefreshToken newRefreshToken = refreshTokenRepository.save(RefreshToken.issue(
+            user.id(),
+            hashingService.hash(rawRefreshToken),
+            clock.instant().plus(securityProperties.getRefreshTokenExpirationDays(), ChronoUnit.DAYS)
+        ));
 
         if (previousToken != null) {
-            previousToken.setRevokedAt(clock.instant());
-            previousToken.setReplacedByTokenId(newRefreshToken.getId());
+            refreshTokenRepository.save(previousToken.replaceBy(newRefreshToken.id(), clock.instant()));
         }
 
         return new AuthResult(
@@ -163,27 +152,29 @@ public class AuthService {
                 accessTokenService.resolveAccessTokenExpiration(),
                 toUserResponse(user)
             ),
-            ResponseCookie.from(securityProperties.getRefreshCookieName(), rawRefreshToken)
-                .httpOnly(true)
-                .secure(isProduction())
-                .sameSite("Lax")
-                .path("/api/v1/auth")
-                .maxAge(securityProperties.getRefreshTokenExpirationDays() * 24L * 60L * 60L)
-                .build()
+            refreshCookie(rawRefreshToken, securityProperties.getRefreshTokenExpirationDays() * 24L * 60L * 60L)
         );
     }
 
-    private boolean isProduction() {
-        return environment.acceptsProfiles(Profiles.of("prod"));
+    private AuthCookie refreshCookie(String value, long maxAgeSeconds) {
+        return new AuthCookie(
+            securityProperties.getRefreshCookieName(),
+            value,
+            true,
+            securityProperties.isRefreshCookieSecure(),
+            "Lax",
+            "/api/v1/auth",
+            maxAgeSeconds
+        );
     }
 
-    private AuthenticatedUser buildAuthenticatedUser(UserEntity user) {
-        Role role = user.getRole();
+    private AuthenticatedUser buildAuthenticatedUser(User user) {
+        Role role = user.role();
         return new AuthenticatedUser(
-            user.getId(),
-            user.getEmail(),
-            user.getFirstName(),
-            user.getLastName(),
+            user.id(),
+            user.email(),
+            user.firstName(),
+            user.lastName(),
             role,
             rolePermissionService.resolvePermissions(role)
         );
@@ -211,6 +202,6 @@ public class AuthService {
     ) {
     }
 
-    public record AuthResult(AuthResponse response, ResponseCookie refreshCookie) {
+    public record AuthResult(AuthResponse response, AuthCookie refreshCookie) {
     }
 }

@@ -1,13 +1,11 @@
 package com.tickets.managementtickets.shared.application.exception;
 
-import org.springframework.http.HttpStatus;
-
 public class ApplicationException extends RuntimeException {
 
     private final String code;
-    private final HttpStatus status;
+    private final ApplicationErrorStatus status;
 
-    public ApplicationException(String code, HttpStatus status, String message) {
+    public ApplicationException(String code, ApplicationErrorStatus status, String message) {
         super(message);
         this.code = code;
         this.status = status;
@@ -17,7 +15,7 @@ public class ApplicationException extends RuntimeException {
         return code;
     }
 
-    public HttpStatus getStatus() {
+    public ApplicationErrorStatus getStatus() {
         return status;
     }
 }

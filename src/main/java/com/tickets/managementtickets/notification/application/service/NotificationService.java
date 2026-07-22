@@ -3,73 +3,70 @@ package com.tickets.managementtickets.notification.application.service;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.application.service.AuthorizationService;
 import com.tickets.managementtickets.identity.domain.model.Permission;
-import com.tickets.managementtickets.notification.infrastructure.persistence.entity.NotificationEntity;
-import com.tickets.managementtickets.notification.infrastructure.persistence.repository.NotificationRepository;
+import com.tickets.managementtickets.notification.application.port.NotificationRepositoryPort;
+import com.tickets.managementtickets.notification.domain.model.Notification;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.model.PageResponse;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 
 import java.time.Clock;
 
-@Service
 public class NotificationService {
 
-    private final NotificationRepository notificationRepository;
+    private final NotificationRepositoryPort notificationRepository;
     private final AuthorizationService authorizationService;
     private final Clock clock;
+    private final TransactionRunner transactionRunner;
 
     public NotificationService(
-        NotificationRepository notificationRepository,
+        NotificationRepositoryPort notificationRepository,
         AuthorizationService authorizationService,
-        Clock clock
+        Clock clock,
+        TransactionRunner transactionRunner
     ) {
         this.notificationRepository = notificationRepository;
         this.authorizationService = authorizationService;
         this.clock = clock;
+        this.transactionRunner = transactionRunner;
     }
 
-    @Transactional(readOnly = true)
     public PageResponse<NotificationResponse> list(AuthenticatedUser currentUser, int page, int size) {
-        authorizationService.requirePermission(currentUser, Permission.NOTIFICATION_READ);
-        return PageResponse.fromPage(
-            notificationRepository.findAllByRecipientIdOrderByCreatedAtDesc(currentUser.id(), PageRequest.of(page, size))
-                .map(this::toResponse)
-        );
+        return transactionRunner.readOnly(() -> {
+            authorizationService.requirePermission(currentUser, Permission.NOTIFICATION_READ);
+            return notificationRepository
+                .findAllByRecipientIdOrderByCreatedAtDesc(currentUser.id(), page, size)
+                .map(this::toResponse);
+        });
     }
 
-    @Transactional
     public NotificationResponse markAsRead(AuthenticatedUser currentUser, String notificationId) {
-        authorizationService.requirePermission(currentUser, Permission.NOTIFICATION_READ);
-        NotificationEntity notification = notificationRepository.findByIdAndRecipientId(notificationId, currentUser.id())
-            .orElseThrow(() -> new NotFoundException("NOTIFICATION_NOT_FOUND", "The notification could not be found."));
+        return transactionRunner.required(() -> {
+            authorizationService.requirePermission(currentUser, Permission.NOTIFICATION_READ);
+            Notification notification = notificationRepository.findByIdAndRecipientId(notificationId, currentUser.id())
+                .orElseThrow(() -> new NotFoundException("NOTIFICATION_NOT_FOUND", "The notification could not be found."));
 
-        notification.setRead(true);
-        notification.setReadAt(clock.instant());
-        return toResponse(notification);
+            return toResponse(notificationRepository.save(notification.markAsRead(clock.instant())));
+        });
     }
 
-    @Transactional
     public void markAllAsRead(AuthenticatedUser currentUser) {
-        authorizationService.requirePermission(currentUser, Permission.NOTIFICATION_READ);
-        notificationRepository.findAllByRecipientIdAndReadFalse(currentUser.id())
-            .forEach(notification -> {
-                notification.setRead(true);
-                notification.setReadAt(clock.instant());
-            });
+        transactionRunner.required(() -> {
+            authorizationService.requirePermission(currentUser, Permission.NOTIFICATION_READ);
+            notificationRepository.findAllByRecipientIdAndReadFalse(currentUser.id())
+                .forEach(notification -> notificationRepository.save(notification.markAsRead(clock.instant())));
+        });
     }
 
-    private NotificationResponse toResponse(NotificationEntity notification) {
+    private NotificationResponse toResponse(Notification notification) {
         return new NotificationResponse(
-            notification.getId(),
-            notification.getType(),
-            notification.getTitle(),
-            notification.getMessage(),
-            notification.getRelatedTicketId(),
-            notification.isRead(),
-            notification.getCreatedAt(),
-            notification.getReadAt()
+            notification.id(),
+            notification.type(),
+            notification.title(),
+            notification.message(),
+            notification.relatedTicketId(),
+            notification.read(),
+            notification.createdAt(),
+            notification.readAt()
         );
     }
 

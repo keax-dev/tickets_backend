@@ -1,6 +1,5 @@
 package com.tickets.managementtickets.identity.infrastructure.security;
 
-import com.tickets.managementtickets.identity.application.port.AuthSecuritySettings;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Positive;
@@ -13,7 +12,7 @@ import java.util.List;
 
 @Validated
 @ConfigurationProperties(prefix = "app.security")
-public class SecurityProperties implements AuthSecuritySettings {
+public class SecurityProperties {
 
     @Positive
     private int accessTokenExpirationMinutes;

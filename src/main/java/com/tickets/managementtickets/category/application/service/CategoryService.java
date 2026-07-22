@@ -1,76 +1,76 @@
 package com.tickets.managementtickets.category.application.service;
 
-import com.tickets.managementtickets.category.infrastructure.persistence.entity.CategoryEntity;
-import com.tickets.managementtickets.category.infrastructure.persistence.repository.CategoryRepository;
+import com.tickets.managementtickets.category.application.port.CategoryRepositoryPort;
+import com.tickets.managementtickets.category.domain.model.Category;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.application.service.AuthorizationService;
 import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.shared.application.exception.ConflictException;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 
 import java.time.Instant;
 import java.util.List;
 
-@Service
 public class CategoryService {
 
-    private final CategoryRepository categoryRepository;
+    private final CategoryRepositoryPort categoryRepository;
     private final AuthorizationService authorizationService;
+    private final TransactionRunner transactionRunner;
 
-    public CategoryService(CategoryRepository categoryRepository, AuthorizationService authorizationService) {
+    public CategoryService(
+        CategoryRepositoryPort categoryRepository,
+        AuthorizationService authorizationService,
+        TransactionRunner transactionRunner
+    ) {
         this.categoryRepository = categoryRepository;
         this.authorizationService = authorizationService;
+        this.transactionRunner = transactionRunner;
     }
 
-    @Transactional(readOnly = true)
     public List<CategoryResponse> list(AuthenticatedUser currentUser) {
-        return categoryRepository.findAll()
+        return transactionRunner.readOnly(() -> categoryRepository.findAll()
             .stream()
-            .filter(category -> currentUser.hasPermission(Permission.CATEGORY_UPDATE) || currentUser.hasPermission(Permission.CATEGORY_DISABLE) || category.isActive())
+            .filter(category -> currentUser.hasPermission(Permission.CATEGORY_UPDATE) || currentUser.hasPermission(Permission.CATEGORY_DISABLE) || category.active())
             .map(this::toResponse)
-            .toList();
+            .toList());
     }
 
-    @Transactional
     public CategoryResponse create(AuthenticatedUser currentUser, UpsertCategoryRequest request) {
-        authorizationService.requirePermission(currentUser, Permission.CATEGORY_CREATE);
-        ensureUniqueName(request.name(), null);
+        return transactionRunner.required(() -> {
+            authorizationService.requirePermission(currentUser, Permission.CATEGORY_CREATE);
+            ensureUniqueName(request.name(), null);
 
-        CategoryEntity category = new CategoryEntity();
-        category.setName(normalizeName(request.name()));
-        category.setDescription(request.description());
-        category.setActive(true);
-        return toResponse(categoryRepository.save(category));
+            Category category = Category.create(normalizeName(request.name()), request.description());
+            return toResponse(categoryRepository.save(category));
+        });
     }
 
-    @Transactional
     public CategoryResponse update(AuthenticatedUser currentUser, String categoryId, UpsertCategoryRequest request) {
-        authorizationService.requirePermission(currentUser, Permission.CATEGORY_UPDATE);
-        CategoryEntity category = categoryRepository.findById(categoryId)
-            .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "The category could not be found."));
-        ensureVersion(category.getVersion(), request.version(), "The category was modified by another request.");
+        return transactionRunner.required(() -> {
+            authorizationService.requirePermission(currentUser, Permission.CATEGORY_UPDATE);
+            Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "The category could not be found."));
+            ensureVersion(category.version(), request.version(), "The category was modified by another request.");
 
-        ensureUniqueName(request.name(), categoryId);
-        category.setName(normalizeName(request.name()));
-        category.setDescription(request.description());
-        return toResponse(category);
+            ensureUniqueName(request.name(), categoryId);
+            return toResponse(categoryRepository.save(category.update(normalizeName(request.name()), request.description())));
+        });
     }
 
-    @Transactional
     public CategoryResponse updateStatus(AuthenticatedUser currentUser, String categoryId, StatusUpdateRequest request) {
-        authorizationService.requirePermission(currentUser, Permission.CATEGORY_DISABLE);
-        CategoryEntity category = categoryRepository.findById(categoryId)
-            .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "The category could not be found."));
-        ensureVersion(category.getVersion(), request.version(), "The category was modified by another request.");
-        category.setActive(request.active());
-        return toResponse(category);
+        return transactionRunner.required(() -> {
+            authorizationService.requirePermission(currentUser, Permission.CATEGORY_DISABLE);
+            Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "The category could not be found."));
+            ensureVersion(category.version(), request.version(), "The category was modified by another request.");
+            return toResponse(categoryRepository.save(category.withActive(request.active())));
+        });
     }
 
     private void ensureUniqueName(String name, String currentCategoryId) {
         categoryRepository.findByNameIgnoreCase(normalizeName(name))
-            .filter(category -> !category.getId().equals(currentCategoryId))
+            .filter(category -> !category.id().equals(currentCategoryId))
             .ifPresent(existing -> {
                 throw new ConflictException("CATEGORY_NAME_ALREADY_EXISTS", "A category with the same name already exists.");
             });
@@ -86,15 +86,15 @@ public class CategoryService {
         }
     }
 
-    private CategoryResponse toResponse(CategoryEntity category) {
+    private CategoryResponse toResponse(Category category) {
         return new CategoryResponse(
-            category.getId(),
-            category.getName(),
-            category.getDescription(),
-            category.isActive(),
-            category.getVersion(),
-            category.getCreatedAt(),
-            category.getUpdatedAt()
+            category.id(),
+            category.name(),
+            category.description(),
+            category.active(),
+            category.version(),
+            category.createdAt(),
+            category.updatedAt()
         );
     }
 

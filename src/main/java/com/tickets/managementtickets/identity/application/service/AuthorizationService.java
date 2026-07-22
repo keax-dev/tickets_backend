@@ -3,9 +3,7 @@ package com.tickets.managementtickets.identity.application.service;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.shared.application.exception.ForbiddenException;
-import org.springframework.stereotype.Service;
 
-@Service
 public class AuthorizationService {
 
     public void requirePermission(AuthenticatedUser user, Permission permission) {

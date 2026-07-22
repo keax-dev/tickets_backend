@@ -1,6 +1,7 @@
 package com.tickets.managementtickets.identity.infrastructure.web.controller;
 
 import com.tickets.managementtickets.identity.application.service.AuthService;
+import com.tickets.managementtickets.identity.application.model.AuthCookie;
 import com.tickets.managementtickets.identity.infrastructure.security.SecurityProperties;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.AuthResponse;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.CurrentUserResponse;
@@ -9,6 +10,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,21 +38,21 @@ public class AuthController {
         HttpServletResponse response
     ) {
         AuthService.AuthResult authResult = authService.login(request.email(), request.password());
-        response.addHeader("Set-Cookie", authResult.refreshCookie().toString());
+        response.addHeader("Set-Cookie", toResponseCookie(authResult.refreshCookie()).toString());
         return ResponseEntity.ok(AuthResponse.from(authResult.response()));
     }
 
     @PostMapping("/refresh")
     public AuthResponse refresh(HttpServletRequest request, HttpServletResponse response) {
         AuthService.AuthResult authResult = authService.refresh(extractRefreshCookie(request));
-        response.addHeader("Set-Cookie", authResult.refreshCookie().toString());
+        response.addHeader("Set-Cookie", toResponseCookie(authResult.refreshCookie()).toString());
         return AuthResponse.from(authResult.response());
     }
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         authService.logout(extractRefreshCookie(request));
-        response.addHeader("Set-Cookie", authService.clearRefreshCookie().toString());
+        response.addHeader("Set-Cookie", toResponseCookie(authService.clearRefreshCookie()).toString());
         return ResponseEntity.noContent().build();
     }
 
@@ -71,5 +73,15 @@ public class AuthController {
         }
 
         return null;
+    }
+
+    private ResponseCookie toResponseCookie(AuthCookie cookie) {
+        return ResponseCookie.from(cookie.name(), cookie.value())
+            .httpOnly(cookie.httpOnly())
+            .secure(cookie.secure())
+            .sameSite(cookie.sameSite())
+            .path(cookie.path())
+            .maxAge(cookie.maxAgeSeconds())
+            .build();
     }
 }

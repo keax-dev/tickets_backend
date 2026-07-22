@@ -6,49 +6,56 @@ import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.shared.application.exception.ConflictException;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.exception.ValidationException;
-import com.tickets.managementtickets.sla.infrastructure.persistence.entity.SlaPolicyEntity;
-import com.tickets.managementtickets.sla.infrastructure.persistence.repository.SlaPolicyRepository;
+import com.tickets.managementtickets.shared.application.port.TransactionRunner;
+import com.tickets.managementtickets.sla.application.port.SlaPolicyRepositoryPort;
+import com.tickets.managementtickets.sla.domain.model.SlaPolicy;
 import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-@Service
 public class SlaPolicyService {
 
-    private final SlaPolicyRepository slaPolicyRepository;
+    private final SlaPolicyRepositoryPort slaPolicyRepository;
     private final AuthorizationService authorizationService;
+    private final TransactionRunner transactionRunner;
 
-    public SlaPolicyService(SlaPolicyRepository slaPolicyRepository, AuthorizationService authorizationService) {
+    public SlaPolicyService(
+        SlaPolicyRepositoryPort slaPolicyRepository,
+        AuthorizationService authorizationService,
+        TransactionRunner transactionRunner
+    ) {
         this.slaPolicyRepository = slaPolicyRepository;
         this.authorizationService = authorizationService;
+        this.transactionRunner = transactionRunner;
     }
 
-    @Transactional(readOnly = true)
     public List<SlaPolicyResponse> list(AuthenticatedUser currentUser) {
-        authorizationService.requirePermission(currentUser, Permission.SLA_READ);
-        return slaPolicyRepository.findAll()
-            .stream()
-            .map(this::toResponse)
-            .toList();
+        return transactionRunner.readOnly(() -> {
+            authorizationService.requirePermission(currentUser, Permission.SLA_READ);
+            return slaPolicyRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .toList();
+        });
     }
 
-    @Transactional
     public SlaPolicyResponse update(AuthenticatedUser currentUser, TicketPriority priority, UpdateSlaPolicyRequest request) {
-        authorizationService.requirePermission(currentUser, Permission.SLA_UPDATE);
-        if (request.firstResponseHours() <= 0 || request.resolutionHours() <= 0) {
-            throw new ValidationException("INVALID_SLA_POLICY", "SLA values must be greater than zero.");
-        }
+        return transactionRunner.required(() -> {
+            authorizationService.requirePermission(currentUser, Permission.SLA_UPDATE);
+            if (request.firstResponseHours() <= 0 || request.resolutionHours() <= 0) {
+                throw new ValidationException("INVALID_SLA_POLICY", "SLA values must be greater than zero.");
+            }
 
-        SlaPolicyEntity policy = slaPolicyRepository.findByPriority(priority)
-            .orElseThrow(() -> new NotFoundException("SLA_POLICY_NOT_FOUND", "The SLA policy could not be found."));
-        ensureVersion(policy.getVersion(), request.version(), "The SLA policy was modified by another request.");
+            SlaPolicy policy = slaPolicyRepository.findByPriority(priority)
+                .orElseThrow(() -> new NotFoundException("SLA_POLICY_NOT_FOUND", "The SLA policy could not be found."));
+            ensureVersion(policy.version(), request.version(), "The SLA policy was modified by another request.");
 
-        policy.setFirstResponseHours(request.firstResponseHours());
-        policy.setResolutionHours(request.resolutionHours());
-        policy.setActive(request.active());
-        return toResponse(policy);
+            return toResponse(slaPolicyRepository.save(policy.update(
+                request.firstResponseHours(),
+                request.resolutionHours(),
+                request.active()
+            )));
+        });
     }
 
     private void ensureVersion(long currentVersion, long requestedVersion, String message) {
@@ -57,14 +64,14 @@ public class SlaPolicyService {
         }
     }
 
-    private SlaPolicyResponse toResponse(SlaPolicyEntity policy) {
+    private SlaPolicyResponse toResponse(SlaPolicy policy) {
         return new SlaPolicyResponse(
-            policy.getId(),
-            policy.getPriority(),
-            policy.getFirstResponseHours(),
-            policy.getResolutionHours(),
-            policy.isActive(),
-            policy.getVersion()
+            policy.id(),
+            policy.priority(),
+            policy.firstResponseHours(),
+            policy.resolutionHours(),
+            policy.active(),
+            policy.version()
         );
     }
 

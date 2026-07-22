@@ -1,6 +1,7 @@
 package com.tickets.managementtickets.shared.infrastructure.web;
 
 import com.tickets.managementtickets.shared.application.exception.ApplicationException;
+import com.tickets.managementtickets.shared.application.exception.ApplicationErrorStatus;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -21,7 +22,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ApplicationException.class)
     ProblemDetail handleApplicationException(ApplicationException exception, HttpServletRequest request) {
-        return buildProblemDetail(exception.getStatus(), exception.getCode(), exception.getMessage(), request, List.of());
+        return buildProblemDetail(toHttpStatus(exception.getStatus()), exception.getCode(), exception.getMessage(), request, List.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -63,6 +64,17 @@ public class ApiExceptionHandler {
 
     private static FieldErrorResponse mapFieldError(FieldError error) {
         return new FieldErrorResponse(error.getField(), error.getDefaultMessage());
+    }
+
+    private HttpStatus toHttpStatus(ApplicationErrorStatus status) {
+        return switch (status) {
+            case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
+            case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
+            case FORBIDDEN -> HttpStatus.FORBIDDEN;
+            case NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case CONFLICT -> HttpStatus.CONFLICT;
+            case UNPROCESSABLE_CONTENT -> HttpStatus.UNPROCESSABLE_CONTENT;
+        };
     }
 
     private ProblemDetail buildProblemDetail(

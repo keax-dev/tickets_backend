@@ -1,7 +1,5 @@
 package com.tickets.managementtickets.identity.application.port;
 
-import java.util.List;
-
 public interface AuthSecuritySettings {
 
     int getAccessTokenExpirationMinutes();
@@ -14,5 +12,5 @@ public interface AuthSecuritySettings {
 
     String getRefreshCookieName();
 
-    List<String> getAllowedOrigins();
+    boolean isRefreshCookieSecure();
 }

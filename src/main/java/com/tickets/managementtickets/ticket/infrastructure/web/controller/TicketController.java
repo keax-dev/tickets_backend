@@ -2,6 +2,7 @@ package com.tickets.managementtickets.ticket.infrastructure.web.controller;
 
 import com.tickets.managementtickets.identity.infrastructure.security.CurrentUserService;
 import com.tickets.managementtickets.shared.application.model.PageResponse;
+import com.tickets.managementtickets.shared.application.model.SortDirection;
 import com.tickets.managementtickets.ticket.application.service.TicketService;
 import com.tickets.managementtickets.ticket.infrastructure.web.dto.AddCommentRequest;
 import com.tickets.managementtickets.ticket.infrastructure.web.dto.AssignTicketRequest;
@@ -68,7 +69,7 @@ public class TicketController {
         return ticketService
             .list(
                 currentUserService.requireCurrentUser(),
-                new TicketService.TicketFilterRequest(search, status, priority, categoryId, assignedAgentId, createdFrom, createdTo, page, size, sortBy, direction)
+                new TicketService.TicketFilterRequest(search, status, priority, categoryId, assignedAgentId, createdFrom, createdTo, page, size, sortBy, toSortDirection(direction))
             )
             .map(TicketSummaryResponse::from);
     }
@@ -230,5 +231,9 @@ public class TicketController {
         return ticketService.listHistory(currentUserService.requireCurrentUser(), ticketId).stream()
             .map(TicketHistoryResponse::from)
             .toList();
+    }
+
+    private SortDirection toSortDirection(Sort.Direction direction) {
+        return direction == Sort.Direction.ASC ? SortDirection.ASC : SortDirection.DESC;
     }
 }

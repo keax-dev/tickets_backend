@@ -1,33 +1,35 @@
 package com.tickets.managementtickets.ticket.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tickets.managementtickets.category.infrastructure.persistence.repository.CategoryRepository;
+import com.tickets.managementtickets.category.application.port.CategoryRepositoryPort;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
+import com.tickets.managementtickets.identity.application.port.UserRepositoryPort;
 import com.tickets.managementtickets.identity.application.service.AuthorizationService;
 import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.identity.domain.model.Role;
-import com.tickets.managementtickets.identity.infrastructure.persistence.repository.UserRepository;
-import com.tickets.managementtickets.notification.infrastructure.persistence.repository.NotificationRepository;
+import com.tickets.managementtickets.notification.application.port.NotificationRepositoryPort;
 import com.tickets.managementtickets.shared.application.exception.BadRequestException;
 import com.tickets.managementtickets.shared.application.exception.UnauthorizedException;
+import com.tickets.managementtickets.shared.application.model.SortDirection;
 import com.tickets.managementtickets.shared.application.port.HashingService;
-import com.tickets.managementtickets.sla.infrastructure.persistence.repository.SlaPolicyRepository;
+import com.tickets.managementtickets.shared.application.port.JsonCodec;
+import com.tickets.managementtickets.shared.application.port.TransactionRunner;
+import com.tickets.managementtickets.sla.application.port.SlaPolicyRepositoryPort;
+import com.tickets.managementtickets.ticket.application.port.IdempotencyPolicy;
+import com.tickets.managementtickets.ticket.application.port.IdempotencyRecordRepositoryPort;
+import com.tickets.managementtickets.ticket.application.port.TicketCodeGenerator;
+import com.tickets.managementtickets.ticket.application.port.TicketCommentRepositoryPort;
+import com.tickets.managementtickets.ticket.application.port.TicketHistoryRepositoryPort;
+import com.tickets.managementtickets.ticket.application.port.TicketLifecyclePolicy;
+import com.tickets.managementtickets.ticket.application.port.TicketRepositoryPort;
+import com.tickets.managementtickets.ticket.domain.model.Ticket;
 import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
-import com.tickets.managementtickets.ticket.infrastructure.persistence.entity.TicketEntity;
-import com.tickets.managementtickets.ticket.infrastructure.persistence.repository.IdempotencyRecordRepository;
-import com.tickets.managementtickets.ticket.infrastructure.persistence.repository.TicketCommentRepository;
-import com.tickets.managementtickets.ticket.infrastructure.persistence.repository.TicketHistoryRepository;
-import com.tickets.managementtickets.ticket.infrastructure.persistence.repository.TicketRepository;
-import com.tickets.managementtickets.ticket.infrastructure.persistence.repository.TicketSequenceRepository;
-import com.tickets.managementtickets.ticket.infrastructure.support.IdempotencyProperties;
-import com.tickets.managementtickets.ticket.infrastructure.support.TicketLifecycleProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Sort;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -47,31 +49,31 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class TicketServiceTest {
 
     @Mock
-    private TicketRepository ticketRepository;
+    private TicketRepositoryPort ticketRepository;
 
     @Mock
-    private TicketCommentRepository ticketCommentRepository;
+    private TicketCommentRepositoryPort ticketCommentRepository;
 
     @Mock
-    private TicketHistoryRepository ticketHistoryRepository;
+    private TicketHistoryRepositoryPort ticketHistoryRepository;
 
     @Mock
-    private TicketSequenceRepository ticketSequenceRepository;
+    private IdempotencyRecordRepositoryPort idempotencyRecordRepository;
 
     @Mock
-    private IdempotencyRecordRepository idempotencyRecordRepository;
+    private UserRepositoryPort userRepository;
 
     @Mock
-    private UserRepository userRepository;
+    private CategoryRepositoryPort categoryRepository;
 
     @Mock
-    private CategoryRepository categoryRepository;
+    private SlaPolicyRepositoryPort slaPolicyRepository;
 
     @Mock
-    private SlaPolicyRepository slaPolicyRepository;
+    private NotificationRepositoryPort notificationRepository;
 
     @Mock
-    private NotificationRepository notificationRepository;
+    private TicketCodeGenerator ticketCodeGenerator;
 
     @Mock
     private AuthorizationService authorizationService;
@@ -84,27 +86,57 @@ class TicketServiceTest {
 
     @BeforeEach
     void setUp() {
-        IdempotencyProperties idempotencyProperties = new IdempotencyProperties();
-        idempotencyProperties.setRecordTtlHours(24);
-        TicketLifecycleProperties ticketLifecycleProperties = new TicketLifecycleProperties();
-        ticketLifecycleProperties.setAutoCloseDays(7);
+        IdempotencyPolicy idempotencyPolicy = () -> 24;
+        TicketLifecyclePolicy ticketLifecyclePolicy = () -> 7;
+        TransactionRunner transactionRunner = new TransactionRunner() {
+            @Override
+            public <T> T readOnly(java.util.function.Supplier<T> action) {
+                return action.get();
+            }
+
+            @Override
+            public <T> T required(java.util.function.Supplier<T> action) {
+                return action.get();
+            }
+        };
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonCodec jsonCodec = new JsonCodec() {
+            @Override
+            public String serialize(Object value) {
+                try {
+                    return objectMapper.writeValueAsString(value);
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+            }
+
+            @Override
+            public <T> T deserialize(String value, Class<T> type) {
+                try {
+                    return objectMapper.readValue(value, type);
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+            }
+        };
 
         ticketService = new TicketService(
             ticketRepository,
             ticketCommentRepository,
             ticketHistoryRepository,
-            ticketSequenceRepository,
             idempotencyRecordRepository,
             userRepository,
             categoryRepository,
             slaPolicyRepository,
             notificationRepository,
+            ticketCodeGenerator,
             authorizationService,
             hashingService,
-            new ObjectMapper(),
+            jsonCodec,
             Clock.fixed(Instant.parse("2026-07-16T00:00:00Z"), ZoneOffset.UTC),
-            idempotencyProperties,
-            ticketLifecycleProperties
+            idempotencyPolicy,
+            ticketLifecyclePolicy,
+            transactionRunner
         );
 
         currentUser = new AuthenticatedUser(
@@ -130,7 +162,7 @@ class TicketServiceTest {
             0,
             10,
             "unsupportedField",
-            Sort.Direction.DESC
+            SortDirection.DESC
         );
 
         BadRequestException exception = assertThrows(
@@ -155,7 +187,7 @@ class TicketServiceTest {
             0,
             10,
             "createdAt",
-            Sort.Direction.DESC
+            SortDirection.DESC
         );
 
         BadRequestException exception = assertThrows(
@@ -200,18 +232,31 @@ class TicketServiceTest {
 
     @Test
     void shouldReturnTicketDetailWhenAssignedAgentIsNull() {
-        TicketEntity ticket = new TicketEntity();
-        ticket.setId("ticket-1");
-        ticket.setCode("TCK-2026-000001");
-        ticket.setTitle("Computadora sin memoria");
-        ticket.setDescription("No me permite crear archivos");
-        ticket.setStatus(TicketStatus.CREATED);
-        ticket.setPriority(TicketPriority.HIGH);
-        ticket.setRequesterId("user-1");
-        ticket.setAssignedAgentId(null);
-        ticket.setCategoryId("category-1");
-        ticket.setFirstResponseDueAt(Instant.parse("2026-07-16T04:00:00Z"));
-        ticket.setResolutionDueAt(Instant.parse("2026-07-17T00:00:00Z"));
+        Ticket ticket = new Ticket(
+            "ticket-1",
+            "TCK-2026-000001",
+            "Computadora sin memoria",
+            "No me permite crear archivos",
+            TicketStatus.CREATED,
+            TicketPriority.HIGH,
+            "user-1",
+            null,
+            "category-1",
+            Instant.parse("2026-07-16T04:00:00Z"),
+            Instant.parse("2026-07-17T00:00:00Z"),
+            null,
+            null,
+            null,
+            null,
+            null,
+            0,
+            false,
+            false,
+            null,
+            null,
+            null,
+            0
+        );
 
         when(ticketRepository.findById("ticket-1")).thenReturn(Optional.of(ticket));
         when(userRepository.findAllById(anyIterable())).thenReturn(List.of());

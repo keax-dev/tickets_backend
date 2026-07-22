@@ -2,7 +2,6 @@ package com.tickets.managementtickets.identity.application.service;
 
 import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.identity.domain.model.Role;
-import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -10,7 +9,6 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
-@Service
 public class RolePermissionService {
 
     private final Map<Role, Set<Permission>> permissionsByRole = new EnumMap<>(Role.class);
