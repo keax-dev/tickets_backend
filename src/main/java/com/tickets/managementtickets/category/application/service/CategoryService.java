@@ -8,7 +8,6 @@ import com.tickets.managementtickets.category.domain.model.Category;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.application.service.AuthorizationService;
 import com.tickets.managementtickets.identity.domain.model.Permission;
-import com.tickets.managementtickets.shared.application.exception.ConflictException;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 
@@ -20,6 +19,7 @@ public class CategoryService {
     private final AuthorizationService authorizationService;
     private final TransactionRunner transactionRunner;
     private final CategoryResponseMapper responseMapper;
+    private final CategoryCommandValidator commandValidator;
 
     public CategoryService(
         CategoryRepositoryPort categoryRepository,
@@ -30,6 +30,7 @@ public class CategoryService {
         this.authorizationService = authorizationService;
         this.transactionRunner = transactionRunner;
         this.responseMapper = new CategoryResponseMapper();
+        this.commandValidator = new CategoryCommandValidator(categoryRepository);
     }
 
     public List<CategoryResponse> list(AuthenticatedUser currentUser) {
@@ -46,9 +47,9 @@ public class CategoryService {
     public CategoryResponse create(AuthenticatedUser currentUser, UpsertCategoryRequest request) {
         return transactionRunner.required(() -> {
             authorizationService.requirePermission(currentUser, Permission.CATEGORY_CREATE);
-            ensureUniqueName(request.name(), null);
+            commandValidator.ensureUniqueName(request.name(), null);
 
-            Category category = Category.create(normalizeName(request.name()), request.description());
+            Category category = Category.create(commandValidator.normalizeName(request.name()), request.description());
             return responseMapper.toResponse(categoryRepository.save(category));
         });
     }
@@ -58,10 +59,10 @@ public class CategoryService {
             authorizationService.requirePermission(currentUser, Permission.CATEGORY_UPDATE);
             Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "The category could not be found."));
-            ensureVersion(category.version(), request.version(), "The category was modified by another request.");
+            commandValidator.ensureVersion(category, request.version());
 
-            ensureUniqueName(request.name(), categoryId);
-            return responseMapper.toResponse(categoryRepository.save(category.update(normalizeName(request.name()), request.description())));
+            commandValidator.ensureUniqueName(request.name(), categoryId);
+            return responseMapper.toResponse(categoryRepository.save(category.update(commandValidator.normalizeName(request.name()), request.description())));
         });
     }
 
@@ -70,27 +71,9 @@ public class CategoryService {
             authorizationService.requirePermission(currentUser, Permission.CATEGORY_DISABLE);
             Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "The category could not be found."));
-            ensureVersion(category.version(), request.version(), "The category was modified by another request.");
+            commandValidator.ensureVersion(category, request.version());
             return responseMapper.toResponse(categoryRepository.save(category.withActive(request.active())));
         });
-    }
-
-    private void ensureUniqueName(String name, String currentCategoryId) {
-        categoryRepository.findByNameIgnoreCase(normalizeName(name))
-            .filter(category -> !category.id().equals(currentCategoryId))
-            .ifPresent(existing -> {
-                throw new ConflictException("CATEGORY_NAME_ALREADY_EXISTS", "A category with the same name already exists.");
-            });
-    }
-
-    private String normalizeName(String name) {
-        return name == null ? "" : name.trim();
-    }
-
-    private void ensureVersion(long currentVersion, long requestedVersion, String message) {
-        if (currentVersion != requestedVersion) {
-            throw new ConflictException("RESOURCE_VERSION_CONFLICT", message);
-        }
     }
 
 }

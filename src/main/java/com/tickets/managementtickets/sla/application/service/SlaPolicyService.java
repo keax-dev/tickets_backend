@@ -3,9 +3,7 @@ package com.tickets.managementtickets.sla.application.service;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.application.service.AuthorizationService;
 import com.tickets.managementtickets.identity.domain.model.Permission;
-import com.tickets.managementtickets.shared.application.exception.ConflictException;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
-import com.tickets.managementtickets.shared.application.exception.ValidationException;
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 import com.tickets.managementtickets.sla.application.command.UpdateSlaPolicyRequest;
 import com.tickets.managementtickets.sla.application.port.SlaPolicyRepositoryPort;
@@ -21,6 +19,7 @@ public class SlaPolicyService {
     private final AuthorizationService authorizationService;
     private final TransactionRunner transactionRunner;
     private final SlaPolicyResponseMapper responseMapper;
+    private final SlaPolicyCommandValidator commandValidator;
 
     public SlaPolicyService(
         SlaPolicyRepositoryPort slaPolicyRepository,
@@ -31,6 +30,7 @@ public class SlaPolicyService {
         this.authorizationService = authorizationService;
         this.transactionRunner = transactionRunner;
         this.responseMapper = new SlaPolicyResponseMapper();
+        this.commandValidator = new SlaPolicyCommandValidator();
     }
 
     public List<SlaPolicyResponse> list(AuthenticatedUser currentUser) {
@@ -46,13 +46,11 @@ public class SlaPolicyService {
     public SlaPolicyResponse update(AuthenticatedUser currentUser, TicketPriority priority, UpdateSlaPolicyRequest request) {
         return transactionRunner.required(() -> {
             authorizationService.requirePermission(currentUser, Permission.SLA_UPDATE);
-            if (request.firstResponseHours() <= 0 || request.resolutionHours() <= 0) {
-                throw new ValidationException("INVALID_SLA_POLICY", "SLA values must be greater than zero.");
-            }
+            commandValidator.ensureValid(request);
 
             SlaPolicy policy = slaPolicyRepository.findByPriority(priority)
                 .orElseThrow(() -> new NotFoundException("SLA_POLICY_NOT_FOUND", "The SLA policy could not be found."));
-            ensureVersion(policy.version(), request.version(), "The SLA policy was modified by another request.");
+            commandValidator.ensureVersion(policy, request.version());
 
             return responseMapper.toResponse(slaPolicyRepository.save(policy.update(
                 request.firstResponseHours(),
@@ -60,12 +58,6 @@ public class SlaPolicyService {
                 request.active()
             )));
         });
-    }
-
-    private void ensureVersion(long currentVersion, long requestedVersion, String message) {
-        if (currentVersion != requestedVersion) {
-            throw new ConflictException("RESOURCE_VERSION_CONFLICT", message);
-        }
     }
 
 }

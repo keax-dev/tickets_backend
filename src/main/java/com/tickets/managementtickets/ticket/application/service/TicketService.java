@@ -12,7 +12,6 @@ import com.tickets.managementtickets.notification.application.port.NotificationR
 import com.tickets.managementtickets.shared.application.exception.ForbiddenException;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.exception.UnauthorizedException;
-import com.tickets.managementtickets.shared.application.exception.ValidationException;
 import com.tickets.managementtickets.shared.application.model.PageResponse;
 import com.tickets.managementtickets.shared.application.port.HashingService;
 import com.tickets.managementtickets.shared.application.port.JsonCodec;
@@ -71,13 +70,15 @@ public class TicketService {
     private final TicketHistoryRepositoryPort ticketHistoryRepository;
     private final UserRepositoryPort userRepository;
     private final CategoryRepositoryPort categoryRepository;
-    private final SlaPolicyRepositoryPort slaPolicyRepository;
     private final TicketCodeGenerator ticketCodeGenerator;
     private final AuthorizationService authorizationService;
     private final Clock clock;
     private final TicketLifecyclePolicy ticketLifecyclePolicy;
     private final TransactionRunner transactionRunner;
     private final TicketAccessPolicy accessPolicy;
+    private final TicketFilterValidator filterValidator;
+    private final TicketCommandValidator commandValidator;
+    private final TicketReferenceResolver referenceResolver;
     private final TicketResponseMapper responseMapper;
     private final TicketHistoryRecorder historyRecorder;
     private final TicketNotificationDispatcher notificationDispatcher;
@@ -106,13 +107,15 @@ public class TicketService {
         this.ticketHistoryRepository = ticketHistoryRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
-        this.slaPolicyRepository = slaPolicyRepository;
         this.ticketCodeGenerator = ticketCodeGenerator;
         this.authorizationService = authorizationService;
         this.clock = clock;
         this.ticketLifecyclePolicy = ticketLifecyclePolicy;
         this.transactionRunner = transactionRunner;
         this.accessPolicy = new TicketAccessPolicy();
+        this.filterValidator = new TicketFilterValidator();
+        this.commandValidator = new TicketCommandValidator();
+        this.referenceResolver = new TicketReferenceResolver(categoryRepository, slaPolicyRepository);
         this.responseMapper = new TicketResponseMapper(accessPolicy);
         this.historyRecorder = new TicketHistoryRecorder(ticketHistoryRepository, jsonCodec);
         this.notificationDispatcher = new TicketNotificationDispatcher(notificationRepository, userRepository);
@@ -127,7 +130,7 @@ public class TicketService {
 
     public PageResponse<TicketSummaryResponse> list(AuthenticatedUser currentUser, TicketFilterRequest filterRequest) {
         return transactionRunner.readOnly(() -> {
-            accessPolicy.validateFilter(filterRequest);
+            filterValidator.validate(filterRequest);
 
             PageResponse<Ticket> page = ticketRepository.findAll(new TicketQuery(
                 filterRequest.search(),
@@ -181,14 +184,14 @@ public class TicketService {
                 return storedResponse.get();
             }
 
-            Category category = findActiveCategory(request.categoryId());
-            SlaPolicy slaPolicy = findActiveSlaPolicy(request.priority());
+            Category category = referenceResolver.findActiveCategory(request.categoryId());
+            SlaPolicy slaPolicy = referenceResolver.findActiveSlaPolicy(request.priority());
 
             Instant now = clock.instant();
             Ticket ticket = Ticket.create(
                 ticketCodeGenerator.nextCode(now),
-                normalize(request.title()),
-                normalize(request.description()),
+                commandValidator.normalize(request.title()),
+                commandValidator.normalize(request.description()),
                 request.priority(),
                 requester.id(),
                 category.id(),
@@ -209,8 +212,9 @@ public class TicketService {
     public TicketDetailResponse update(AuthenticatedUser currentUser, String ticketId, UpdateTicketRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
+            commandValidator.ensureNotTerminal(ticket);
             accessPolicy.ensureCanUpdateTicket(currentUser, ticket);
-            accessPolicy.ensureVersion(ticket, request.version());
+            commandValidator.ensureVersion(ticket, request.version());
 
             String previousTitle = ticket.getTitle();
             String previousDescription = ticket.getDescription();
@@ -219,12 +223,12 @@ public class TicketService {
 
             String requestedCategoryId = null;
             if (request.categoryId() != null && !request.categoryId().isBlank()) {
-                requestedCategoryId = findActiveCategory(request.categoryId()).id();
+                requestedCategoryId = referenceResolver.findActiveCategory(request.categoryId()).id();
             }
-            ticket.updateDetails(normalize(request.title()), normalize(request.description()), requestedCategoryId);
+            ticket.updateDetails(commandValidator.normalize(request.title()), commandValidator.normalize(request.description()), requestedCategoryId);
             if (request.priority() != null && request.priority() != ticket.getPriority()) {
                 authorizationService.requirePermission(currentUser, Permission.TICKET_CHANGE_PRIORITY);
-                ticket.changePriority(request.priority(), findActiveSlaPolicy(request.priority()), clock.instant());
+                ticket.changePriority(request.priority(), referenceResolver.findActiveSlaPolicy(request.priority()), clock.instant());
             }
 
             ticket = ticketRepository.save(ticket);
@@ -247,17 +251,12 @@ public class TicketService {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
             authorizationService.requirePermission(currentUser, ticket.getAssignedAgentId() == null ? Permission.TICKET_ASSIGN : Permission.TICKET_REASSIGN);
-            accessPolicy.ensureVersion(ticket, request.version());
-            accessPolicy.ensureNotTerminal(ticket);
+            commandValidator.ensureVersion(ticket, request.version());
+            commandValidator.ensureNotTerminal(ticket);
 
             User assignee = userRepository.findById(request.agentId())
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "The assignee could not be found."));
-            if (!assignee.active()) {
-                throw new ValidationException("ASSIGNEE_INACTIVE", "The assignee must be active.");
-            }
-            if (assignee.role() != Role.SUPPORT_AGENT && assignee.role() != Role.SUPPORT_MANAGER) {
-                throw new ValidationException("INVALID_ASSIGNEE_ROLE", "The assignee must be a support user.");
-            }
+            commandValidator.ensureAssigneeCanHandleTickets(assignee);
 
             String previousAgentId = ticket.getAssignedAgentId();
             ticket.assign(assignee.id());
@@ -274,10 +273,8 @@ public class TicketService {
             Ticket ticket = findTicket(ticketId);
             accessPolicy.ensureCanOperateTicket(currentUser, ticket);
             authorizationService.requirePermission(currentUser, Permission.TICKET_RESOLVE);
-            accessPolicy.ensureVersion(ticket, request.version());
-            if (ticket.getStatus() != TicketStatus.ASSIGNED) {
-                throw new ValidationException("INVALID_TICKET_TRANSITION", "The ticket must be in ASSIGNED status.");
-            }
+            commandValidator.ensureVersion(ticket, request.version());
+            commandValidator.ensureStartAllowed(ticket);
 
             ticket.start(clock.instant());
             ticket = ticketRepository.save(ticket);
@@ -290,10 +287,8 @@ public class TicketService {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
             accessPolicy.ensureCanOperateTicket(currentUser, ticket);
-            accessPolicy.ensureVersion(ticket, request.version());
-            if (ticket.getStatus() != TicketStatus.IN_PROGRESS) {
-                throw new ValidationException("INVALID_TICKET_TRANSITION", "The ticket must be in IN_PROGRESS status.");
-            }
+            commandValidator.ensureVersion(ticket, request.version());
+            commandValidator.ensureInformationRequestAllowed(ticket);
             addCommentInternal(currentUser, ticket, request.content(), CommentVisibility.PUBLIC);
             ticket.requestInformation(clock.instant());
             ticket = ticketRepository.save(ticket);
@@ -307,15 +302,10 @@ public class TicketService {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
             accessPolicy.ensureCanOperateTicket(currentUser, ticket);
-            accessPolicy.ensureVersion(ticket, request.version());
-            if (ticket.getStatus() != TicketStatus.IN_PROGRESS && ticket.getStatus() != TicketStatus.WAITING_FOR_CUSTOMER) {
-                throw new ValidationException("INVALID_TICKET_TRANSITION", "The ticket cannot be resolved from its current status.");
-            }
-            if (request.resolutionSummary() == null || request.resolutionSummary().isBlank()) {
-                throw new ValidationException("RESOLUTION_SUMMARY_REQUIRED", "The resolution summary is required.");
-            }
+            commandValidator.ensureVersion(ticket, request.version());
+            commandValidator.ensureResolveAllowed(ticket, request.resolutionSummary());
 
-            ticket.resolve(normalize(request.resolutionSummary()), clock.instant());
+            ticket.resolve(commandValidator.normalize(request.resolutionSummary()), clock.instant());
             ticket = ticketRepository.save(ticket);
             historyRecorder.resolved(ticket.getId(), currentUser.id(), ticket.getResolutionSummary());
             notificationDispatcher.ticketResolved(ticket);
@@ -326,11 +316,9 @@ public class TicketService {
     public TicketDetailResponse close(AuthenticatedUser currentUser, String ticketId, VersionedRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            accessPolicy.ensureVersion(ticket, request.version());
+            commandValidator.ensureVersion(ticket, request.version());
             accessPolicy.ensureCanCloseTicket(currentUser, ticket);
-            if (ticket.getStatus() != TicketStatus.RESOLVED) {
-                throw new ValidationException("INVALID_TICKET_TRANSITION", "The ticket must be resolved before closing.");
-            }
+            commandValidator.ensureCloseAllowed(ticket);
 
             ticket.close(clock.instant());
             ticket = ticketRepository.save(ticket);
@@ -343,16 +331,11 @@ public class TicketService {
     public TicketDetailResponse reopen(AuthenticatedUser currentUser, String ticketId, ReopenTicketRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            accessPolicy.ensureVersion(ticket, request.version());
-            if (ticket.getStatus() != TicketStatus.RESOLVED) {
-                throw new ValidationException("INVALID_TICKET_TRANSITION", "Only resolved tickets can be reopened.");
-            }
-            if (request.reason() == null || request.reason().isBlank()) {
-                throw new ValidationException("REOPEN_REASON_REQUIRED", "The reopen reason is required.");
-            }
+            commandValidator.ensureVersion(ticket, request.version());
+            commandValidator.ensureReopenRequestAllowed(ticket, request.reason());
 
             accessPolicy.ensureCanReopenTicket(currentUser, ticket, clock.instant());
-            ticket.reopen(clock.instant(), findActiveSlaPolicy(ticket.getPriority()));
+            ticket.reopen(clock.instant(), referenceResolver.findActiveSlaPolicy(ticket.getPriority()));
             ticket = ticketRepository.save(ticket);
             historyRecorder.reopened(ticket.getId(), currentUser.id(), request.reason());
             notificationDispatcher.ticketReopened(ticket);
@@ -363,10 +346,8 @@ public class TicketService {
     public TicketDetailResponse cancel(AuthenticatedUser currentUser, String ticketId, CancelTicketRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            accessPolicy.ensureVersion(ticket, request.version());
-            if (request.reason() == null || request.reason().isBlank()) {
-                throw new ValidationException("CANCEL_REASON_REQUIRED", "The cancel reason is required.");
-            }
+            commandValidator.ensureVersion(ticket, request.version());
+            commandValidator.ensureCancelReason(request.reason());
 
             accessPolicy.ensureCanCancelTicket(currentUser, ticket);
             ticket.cancel(clock.instant());
@@ -394,11 +375,9 @@ public class TicketService {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
             accessPolicy.ensureCanViewTicket(currentUser, ticket);
-            accessPolicy.ensureVersion(ticket, request.version());
-            accessPolicy.ensureNotTerminal(ticket);
-            if (request.content() == null || request.content().isBlank()) {
-                throw new ValidationException("COMMENT_CONTENT_REQUIRED", "The comment content is required.");
-            }
+            commandValidator.ensureVersion(ticket, request.version());
+            commandValidator.ensureNotTerminal(ticket);
+            commandValidator.ensureCommentContent(request.content());
 
             CommentVisibility visibility = request.visibility();
             if (visibility == CommentVisibility.INTERNAL) {
@@ -464,29 +443,11 @@ public class TicketService {
             .orElseThrow(() -> new NotFoundException("TICKET_NOT_FOUND", "The ticket could not be found."));
     }
 
-    private Category findActiveCategory(String categoryId) {
-        Category category = categoryRepository.findById(categoryId)
-            .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "The category could not be found."));
-        if (!category.active()) {
-            throw new ValidationException("CATEGORY_INACTIVE", "The category is inactive.");
-        }
-        return category;
-    }
-
-    private SlaPolicy findActiveSlaPolicy(TicketPriority priority) {
-        SlaPolicy policy = slaPolicyRepository.findByPriority(priority)
-            .orElseThrow(() -> new NotFoundException("SLA_POLICY_NOT_FOUND", "The SLA policy could not be found."));
-        if (!policy.active()) {
-            throw new ValidationException("SLA_POLICY_INACTIVE", "The SLA policy is inactive.");
-        }
-        return policy;
-    }
-
     private TicketComment addCommentInternal(AuthenticatedUser currentUser, Ticket ticket, String content, CommentVisibility visibility) {
         TicketComment savedComment = ticketCommentRepository.save(TicketComment.create(
             ticket.getId(),
             currentUser.id(),
-            normalize(content),
+            commandValidator.normalize(content),
             visibility
         ));
 
@@ -535,10 +496,6 @@ public class TicketService {
 
     private TicketCommentResponse buildCommentResponse(TicketComment comment, Map<String, User> usersById) {
         return responseMapper.toCommentResponse(comment, usersById);
-    }
-
-    private String normalize(String value) {
-        return value == null ? "" : value.trim();
     }
 
 }

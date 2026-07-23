@@ -8,7 +8,6 @@ import com.tickets.managementtickets.identity.application.port.UserRepositoryPor
 import com.tickets.managementtickets.identity.application.result.UserResponse;
 import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.identity.domain.model.User;
-import com.tickets.managementtickets.shared.application.exception.ConflictException;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.port.PasswordHashingService;
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;
@@ -22,6 +21,7 @@ public class UserManagementService {
     private final PasswordHashingService passwordHashingService;
     private final TransactionRunner transactionRunner;
     private final IdentityResponseMapper responseMapper;
+    private final UserCommandValidator commandValidator;
 
     public UserManagementService(
         UserRepositoryPort userRepository,
@@ -34,6 +34,7 @@ public class UserManagementService {
         this.passwordHashingService = passwordHashingService;
         this.transactionRunner = transactionRunner;
         this.responseMapper = new IdentityResponseMapper();
+        this.commandValidator = new UserCommandValidator(userRepository);
     }
 
     public List<UserResponse> list(AuthenticatedUser currentUser) {
@@ -57,12 +58,12 @@ public class UserManagementService {
     public UserResponse create(AuthenticatedUser currentUser, CreateUserRequest request) {
         return transactionRunner.required(() -> {
             authorizationService.requirePermission(currentUser, Permission.USER_CREATE);
-            ensureEmailIsUnique(request.email(), null);
+            commandValidator.ensureEmailIsUnique(request.email(), null);
 
             User user = User.create(
                 request.firstName().trim(),
                 request.lastName().trim(),
-                normalizeEmail(request.email()),
+                commandValidator.normalizeEmail(request.email()),
                 passwordHashingService.encode(request.password()),
                 request.role()
             );
@@ -75,13 +76,13 @@ public class UserManagementService {
             authorizationService.requirePermission(currentUser, Permission.USER_UPDATE);
             User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "The user could not be found."));
-            ensureVersion(user.version(), request.version(), "The user was modified by another request.");
+            commandValidator.ensureVersion(user, request.version());
 
-            ensureEmailIsUnique(request.email(), userId);
+            commandValidator.ensureEmailIsUnique(request.email(), userId);
             return responseMapper.toUserResponse(userRepository.save(user.updateProfile(
                 request.firstName().trim(),
                 request.lastName().trim(),
-                normalizeEmail(request.email()),
+                commandValidator.normalizeEmail(request.email()),
                 request.role()
             )));
         });
@@ -92,27 +93,9 @@ public class UserManagementService {
             authorizationService.requirePermission(currentUser, Permission.USER_DISABLE);
             User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "The user could not be found."));
-            ensureVersion(user.version(), request.version(), "The user was modified by another request.");
+            commandValidator.ensureVersion(user, request.version());
             return responseMapper.toUserResponse(userRepository.save(user.withActive(request.active())));
         });
-    }
-
-    private void ensureEmailIsUnique(String email, String currentUserId) {
-        userRepository.findByEmail(normalizeEmail(email))
-            .filter(existing -> !existing.id().equals(currentUserId))
-            .ifPresent(existing -> {
-                throw new ConflictException("USER_EMAIL_ALREADY_EXISTS", "A user with the same email already exists.");
-            });
-    }
-
-    private String normalizeEmail(String email) {
-        return email == null ? "" : email.trim().toLowerCase();
-    }
-
-    private void ensureVersion(long currentVersion, long requestedVersion, String message) {
-        if (currentVersion != requestedVersion) {
-            throw new ConflictException("RESOURCE_VERSION_CONFLICT", message);
-        }
     }
 
 }
