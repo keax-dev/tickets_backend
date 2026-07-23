@@ -3,6 +3,7 @@ package com.tickets.managementtickets.ticket.infrastructure.web.controller;
 import com.tickets.managementtickets.identity.application.port.CurrentAuthenticatedUserProvider;
 import com.tickets.managementtickets.shared.application.model.PageResponse;
 import com.tickets.managementtickets.shared.application.model.SortDirection;
+import com.tickets.managementtickets.ticket.application.query.TicketFilterRequest;
 import com.tickets.managementtickets.ticket.application.service.TicketService;
 import com.tickets.managementtickets.ticket.infrastructure.web.dto.AddCommentRequest;
 import com.tickets.managementtickets.ticket.infrastructure.web.dto.AssignTicketRequest;
@@ -70,7 +71,7 @@ public class TicketController {
         return ticketService
             .list(
                 currentUserProvider.requireCurrentUser(),
-                new TicketService.TicketFilterRequest(search, status, priority, categoryId, assignedAgentId, createdFrom, createdTo, page, size, sortBy, toSortDirection(direction))
+                new TicketFilterRequest(search, status, priority, categoryId, assignedAgentId, createdFrom, createdTo, page, size, sortBy, toSortDirection(direction))
             )
             .map(TicketSummaryResponse::from);
     }
@@ -83,7 +84,7 @@ public class TicketController {
         return TicketDetailResponse.from(
             ticketService.create(
                 currentUserProvider.requireCurrentUser(),
-                new TicketService.CreateTicketRequest(request.title(), request.description(), request.categoryId(), request.priority()),
+                new com.tickets.managementtickets.ticket.application.command.CreateTicketRequest(request.title(), request.description(), request.categoryId(), request.priority()),
                 idempotencyKey
             )
         );
@@ -103,7 +104,7 @@ public class TicketController {
             ticketService.update(
                 currentUserProvider.requireCurrentUser(),
                 ticketId,
-                new TicketService.UpdateTicketRequest(request.version(), request.title(), request.description(), request.categoryId(), request.priority())
+                new com.tickets.managementtickets.ticket.application.command.UpdateTicketRequest(request.version(), request.title(), request.description(), request.categoryId(), request.priority())
             )
         );
     }
@@ -117,7 +118,7 @@ public class TicketController {
             ticketService.assign(
                 currentUserProvider.requireCurrentUser(),
                 ticketId,
-                new TicketService.AssignTicketRequest(request.version(), request.agentId())
+                new com.tickets.managementtickets.ticket.application.command.AssignTicketRequest(request.version(), request.agentId())
             )
         );
     }
@@ -131,7 +132,7 @@ public class TicketController {
             ticketService.start(
                 currentUserProvider.requireCurrentUser(),
                 ticketId,
-                new TicketService.VersionedRequest(request.version())
+                new com.tickets.managementtickets.ticket.application.command.VersionedRequest(request.version())
             )
         );
     }
@@ -145,7 +146,7 @@ public class TicketController {
             ticketService.requestInformation(
                 currentUserProvider.requireCurrentUser(),
                 ticketId,
-                new TicketService.RequestInformationRequest(request.version(), request.content())
+                new com.tickets.managementtickets.ticket.application.command.RequestInformationRequest(request.version(), request.content())
             )
         );
     }
@@ -159,7 +160,7 @@ public class TicketController {
             ticketService.resolve(
                 currentUserProvider.requireCurrentUser(),
                 ticketId,
-                new TicketService.ResolveTicketRequest(request.version(), request.resolutionSummary())
+                new com.tickets.managementtickets.ticket.application.command.ResolveTicketRequest(request.version(), request.resolutionSummary())
             )
         );
     }
@@ -173,7 +174,7 @@ public class TicketController {
             ticketService.close(
                 currentUserProvider.requireCurrentUser(),
                 ticketId,
-                new TicketService.VersionedRequest(request.version())
+                new com.tickets.managementtickets.ticket.application.command.VersionedRequest(request.version())
             )
         );
     }
@@ -187,7 +188,7 @@ public class TicketController {
             ticketService.reopen(
                 currentUserProvider.requireCurrentUser(),
                 ticketId,
-                new TicketService.ReopenTicketRequest(request.version(), request.reason())
+                new com.tickets.managementtickets.ticket.application.command.ReopenTicketRequest(request.version(), request.reason())
             )
         );
     }
@@ -201,7 +202,7 @@ public class TicketController {
             ticketService.cancel(
                 currentUserProvider.requireCurrentUser(),
                 ticketId,
-                new TicketService.CancelTicketRequest(request.version(), request.reason())
+                new com.tickets.managementtickets.ticket.application.command.CancelTicketRequest(request.version(), request.reason())
             )
         );
     }
@@ -222,7 +223,7 @@ public class TicketController {
             ticketService.addComment(
                 currentUserProvider.requireCurrentUser(),
                 ticketId,
-                new TicketService.AddCommentRequest(request.version(), request.content(), request.visibility())
+                new com.tickets.managementtickets.ticket.application.command.AddCommentRequest(request.version(), request.content(), request.visibility())
             )
         );
     }

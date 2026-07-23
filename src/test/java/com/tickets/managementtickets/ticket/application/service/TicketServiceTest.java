@@ -15,6 +15,7 @@ import com.tickets.managementtickets.shared.application.port.HashingService;
 import com.tickets.managementtickets.shared.application.port.JsonCodec;
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 import com.tickets.managementtickets.sla.application.port.SlaPolicyRepositoryPort;
+import com.tickets.managementtickets.ticket.application.command.CreateTicketRequest;
 import com.tickets.managementtickets.ticket.application.port.IdempotencyPolicy;
 import com.tickets.managementtickets.ticket.application.port.IdempotencyRecordRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketCodeGenerator;
@@ -22,6 +23,8 @@ import com.tickets.managementtickets.ticket.application.port.TicketCommentReposi
 import com.tickets.managementtickets.ticket.application.port.TicketHistoryRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketLifecyclePolicy;
 import com.tickets.managementtickets.ticket.application.port.TicketRepositoryPort;
+import com.tickets.managementtickets.ticket.application.query.TicketFilterRequest;
+import com.tickets.managementtickets.ticket.application.result.TicketDetailResponse;
 import com.tickets.managementtickets.ticket.domain.model.Ticket;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistory;
 import com.tickets.managementtickets.shared.domain.model.TicketPriority;
@@ -156,7 +159,7 @@ class TicketServiceTest {
 
     @Test
     void shouldRejectUnsupportedSortField() {
-        TicketService.TicketFilterRequest filterRequest = new TicketService.TicketFilterRequest(
+        TicketFilterRequest filterRequest = new TicketFilterRequest(
             null,
             null,
             null,
@@ -181,7 +184,7 @@ class TicketServiceTest {
 
     @Test
     void shouldRejectInvalidCreatedAtRange() {
-        TicketService.TicketFilterRequest filterRequest = new TicketService.TicketFilterRequest(
+        TicketFilterRequest filterRequest = new TicketFilterRequest(
             null,
             null,
             null,
@@ -221,7 +224,7 @@ class TicketServiceTest {
             UnauthorizedException.class,
             () -> ticketService.create(
                 customerUser,
-                new TicketService.CreateTicketRequest(
+                new CreateTicketRequest(
                     "Computadora sin memoria",
                     "No me permite crear archivos",
                     "category-1",
@@ -267,7 +270,7 @@ class TicketServiceTest {
         when(userRepository.findAllById(anyIterable())).thenReturn(List.of());
         when(categoryRepository.findAllById(anyIterable())).thenReturn(List.of());
 
-        TicketService.TicketDetailResponse response = ticketService.getById(currentUser, "ticket-1");
+        TicketDetailResponse response = ticketService.getById(currentUser, "ticket-1");
 
         assertEquals("ticket-1", response.id());
         assertNull(response.assignedAgentId());

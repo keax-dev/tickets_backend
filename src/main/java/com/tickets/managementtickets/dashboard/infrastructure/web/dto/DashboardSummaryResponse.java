@@ -1,6 +1,5 @@
 package com.tickets.managementtickets.dashboard.infrastructure.web.dto;
 
-import com.tickets.managementtickets.dashboard.application.service.DashboardService;
 import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
@@ -17,7 +16,7 @@ public record DashboardSummaryResponse(
     Map<TicketPriority, Long> ticketsByPriority
 ) {
 
-    public static DashboardSummaryResponse from(DashboardService.DashboardSummaryResponse response) {
+    public static DashboardSummaryResponse from(com.tickets.managementtickets.dashboard.application.result.DashboardSummaryResponse response) {
         return new DashboardSummaryResponse(
             response.activeTickets(),
             response.createdToday(),

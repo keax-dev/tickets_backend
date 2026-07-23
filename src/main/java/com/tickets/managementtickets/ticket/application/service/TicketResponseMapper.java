@@ -3,6 +3,10 @@ package com.tickets.managementtickets.ticket.application.service;
 import com.tickets.managementtickets.category.domain.model.Category;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.domain.model.User;
+import com.tickets.managementtickets.ticket.application.result.TicketCommentResponse;
+import com.tickets.managementtickets.ticket.application.result.TicketDetailResponse;
+import com.tickets.managementtickets.ticket.application.result.TicketHistoryResponse;
+import com.tickets.managementtickets.ticket.application.result.TicketSummaryResponse;
 import com.tickets.managementtickets.ticket.domain.model.Ticket;
 import com.tickets.managementtickets.ticket.domain.model.TicketComment;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistory;
@@ -17,12 +21,12 @@ final class TicketResponseMapper {
         this.accessPolicy = accessPolicy;
     }
 
-    TicketService.TicketSummaryResponse toSummaryResponse(
+    TicketSummaryResponse toSummaryResponse(
         Ticket ticket,
         Map<String, User> usersById,
         Map<String, Category> categoriesById
     ) {
-        return new TicketService.TicketSummaryResponse(
+        return new TicketSummaryResponse(
             ticket.getId(),
             ticket.getCode(),
             ticket.getTitle(),
@@ -43,13 +47,13 @@ final class TicketResponseMapper {
         );
     }
 
-    TicketService.TicketDetailResponse toDetailResponse(
+    TicketDetailResponse toDetailResponse(
         Ticket ticket,
         AuthenticatedUser currentUser,
         Map<String, User> usersById,
         Map<String, Category> categoriesById
     ) {
-        return new TicketService.TicketDetailResponse(
+        return new TicketDetailResponse(
             ticket.getId(),
             ticket.getCode(),
             ticket.getTitle(),
@@ -80,8 +84,8 @@ final class TicketResponseMapper {
         );
     }
 
-    TicketService.TicketCommentResponse toCommentResponse(TicketComment comment, Map<String, User> usersById) {
-        return new TicketService.TicketCommentResponse(
+    TicketCommentResponse toCommentResponse(TicketComment comment, Map<String, User> usersById) {
+        return new TicketCommentResponse(
             comment.id(),
             comment.ticketId(),
             comment.authorId(),
@@ -93,8 +97,8 @@ final class TicketResponseMapper {
         );
     }
 
-    TicketService.TicketHistoryResponse toHistoryResponse(TicketHistory entry, Map<String, User> usersById) {
-        return new TicketService.TicketHistoryResponse(
+    TicketHistoryResponse toHistoryResponse(TicketHistory entry, Map<String, User> usersById) {
+        return new TicketHistoryResponse(
             entry.id(),
             entry.action(),
             entry.performedBy(),

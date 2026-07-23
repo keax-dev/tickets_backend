@@ -1,6 +1,9 @@
 package com.tickets.managementtickets.category.application.service;
 
+import com.tickets.managementtickets.category.application.command.StatusUpdateRequest;
+import com.tickets.managementtickets.category.application.command.UpsertCategoryRequest;
 import com.tickets.managementtickets.category.application.port.CategoryRepositoryPort;
+import com.tickets.managementtickets.category.application.result.CategoryResponse;
 import com.tickets.managementtickets.category.domain.model.Category;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.application.service.AuthorizationService;
@@ -9,7 +12,6 @@ import com.tickets.managementtickets.shared.application.exception.ConflictExcept
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 
-import java.time.Instant;
 import java.util.List;
 
 public class CategoryService {
@@ -101,20 +103,4 @@ public class CategoryService {
         );
     }
 
-    public record UpsertCategoryRequest(long version, String name, String description) {
-    }
-
-    public record StatusUpdateRequest(long version, boolean active) {
-    }
-
-    public record CategoryResponse(
-        String id,
-        String name,
-        String description,
-        boolean active,
-        long version,
-        Instant createdAt,
-        Instant updatedAt
-    ) {
-    }
 }

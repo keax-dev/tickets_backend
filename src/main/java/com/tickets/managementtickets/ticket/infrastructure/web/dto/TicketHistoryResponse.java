@@ -1,6 +1,5 @@
 package com.tickets.managementtickets.ticket.infrastructure.web.dto;
 
-import com.tickets.managementtickets.ticket.application.service.TicketService;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistoryAction;
 
 import java.time.Instant;
@@ -16,7 +15,7 @@ public record TicketHistoryResponse(
     Instant createdAt
 ) {
 
-    public static TicketHistoryResponse from(TicketService.TicketHistoryResponse response) {
+    public static TicketHistoryResponse from(com.tickets.managementtickets.ticket.application.result.TicketHistoryResponse response) {
         return new TicketHistoryResponse(
             response.id(),
             response.action(),

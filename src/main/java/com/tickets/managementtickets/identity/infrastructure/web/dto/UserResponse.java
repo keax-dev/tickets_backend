@@ -1,6 +1,5 @@
 package com.tickets.managementtickets.identity.infrastructure.web.dto;
 
-import com.tickets.managementtickets.identity.application.service.UserManagementService;
 import com.tickets.managementtickets.identity.domain.model.Role;
 
 import java.time.Instant;
@@ -16,7 +15,7 @@ public record UserResponse(
     long version
 ) {
 
-    public static UserResponse from(UserManagementService.UserResponse response) {
+    public static UserResponse from(com.tickets.managementtickets.identity.application.result.UserResponse response) {
         return new UserResponse(
             response.id(),
             response.firstName(),

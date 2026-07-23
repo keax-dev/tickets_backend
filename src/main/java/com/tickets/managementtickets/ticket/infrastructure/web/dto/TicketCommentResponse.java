@@ -1,6 +1,5 @@
 package com.tickets.managementtickets.ticket.infrastructure.web.dto;
 
-import com.tickets.managementtickets.ticket.application.service.TicketService;
 import com.tickets.managementtickets.ticket.domain.model.CommentVisibility;
 
 import java.time.Instant;
@@ -16,7 +15,7 @@ public record TicketCommentResponse(
     Instant updatedAt
 ) {
 
-    public static TicketCommentResponse from(TicketService.TicketCommentResponse response) {
+    public static TicketCommentResponse from(com.tickets.managementtickets.ticket.application.result.TicketCommentResponse response) {
         return new TicketCommentResponse(
             response.id(),
             response.ticketId(),

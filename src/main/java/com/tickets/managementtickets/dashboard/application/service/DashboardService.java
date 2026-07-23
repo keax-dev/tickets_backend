@@ -1,5 +1,7 @@
 package com.tickets.managementtickets.dashboard.application.service;
 
+import com.tickets.managementtickets.dashboard.application.result.DashboardSummaryResponse;
+import com.tickets.managementtickets.dashboard.application.result.RecentActivityResponse;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.application.port.UserRepositoryPort;
 import com.tickets.managementtickets.identity.application.service.AuthorizationService;
@@ -11,7 +13,6 @@ import com.tickets.managementtickets.ticket.application.port.TicketHistoryReposi
 import com.tickets.managementtickets.ticket.application.port.TicketRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketVisibility;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistory;
-import com.tickets.managementtickets.ticket.domain.model.TicketHistoryAction;
 import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
@@ -125,24 +126,4 @@ public class DashboardService {
         return TicketVisibility.REQUESTER;
     }
 
-    public record DashboardSummaryResponse(
-        long activeTickets,
-        long createdToday,
-        long unassignedTickets,
-        long breachedTickets,
-        long dueSoonTickets,
-        long assignedToCurrentUser,
-        Map<TicketStatus, Long> ticketsByStatus,
-        Map<TicketPriority, Long> ticketsByPriority
-    ) {
-    }
-
-    public record RecentActivityResponse(
-        String id,
-        String ticketId,
-        TicketHistoryAction action,
-        String performedByName,
-        Instant createdAt
-    ) {
-    }
 }

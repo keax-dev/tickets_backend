@@ -2,6 +2,7 @@ package com.tickets.managementtickets.identity.infrastructure.web.controller;
 
 import com.tickets.managementtickets.identity.application.service.AuthService;
 import com.tickets.managementtickets.identity.application.model.AuthCookie;
+import com.tickets.managementtickets.identity.application.result.AuthResult;
 import com.tickets.managementtickets.identity.infrastructure.security.SecurityProperties;
 import com.tickets.managementtickets.identity.infrastructure.web.ratelimit.LoginRateLimiter;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.AuthResponse;
@@ -44,7 +45,7 @@ public class AuthController {
     ) {
         String rateLimitKey = loginRateLimiter.keyFor(servletRequest.getRemoteAddr(), request.email());
         loginRateLimiter.checkAllowed(rateLimitKey);
-        AuthService.AuthResult authResult;
+        AuthResult authResult;
         try {
             authResult = authService.login(request.email(), request.password());
             loginRateLimiter.reset(rateLimitKey);
@@ -58,7 +59,7 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public AuthResponse refresh(HttpServletRequest request, HttpServletResponse response) {
-        AuthService.AuthResult authResult = authService.refresh(extractRefreshCookie(request));
+        AuthResult authResult = authService.refresh(extractRefreshCookie(request));
         response.addHeader("Set-Cookie", toResponseCookie(authResult.refreshCookie()).toString());
         return AuthResponse.from(authResult.response());
     }

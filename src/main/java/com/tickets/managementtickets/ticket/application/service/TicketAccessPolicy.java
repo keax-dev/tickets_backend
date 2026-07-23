@@ -7,6 +7,7 @@ import com.tickets.managementtickets.shared.application.exception.ConflictExcept
 import com.tickets.managementtickets.shared.application.exception.ForbiddenException;
 import com.tickets.managementtickets.shared.application.exception.ValidationException;
 import com.tickets.managementtickets.ticket.application.port.TicketVisibility;
+import com.tickets.managementtickets.ticket.application.query.TicketFilterRequest;
 import com.tickets.managementtickets.ticket.domain.model.Ticket;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
@@ -30,7 +31,7 @@ final class TicketAccessPolicy {
         "resolutionDueAt"
     );
 
-    void validateFilter(TicketService.TicketFilterRequest filterRequest) {
+    void validateFilter(TicketFilterRequest filterRequest) {
         if (filterRequest.page() < 0) {
             throw new BadRequestException("INVALID_PAGE", "The page number must be greater than or equal to zero.");
         }

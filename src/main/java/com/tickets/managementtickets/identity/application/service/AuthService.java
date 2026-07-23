@@ -8,6 +8,9 @@ import com.tickets.managementtickets.identity.application.port.CurrentAuthentica
 import com.tickets.managementtickets.identity.application.port.RefreshTokenRepositoryPort;
 import com.tickets.managementtickets.identity.application.port.RefreshTokenGenerator;
 import com.tickets.managementtickets.identity.application.port.UserRepositoryPort;
+import com.tickets.managementtickets.identity.application.result.AuthResponse;
+import com.tickets.managementtickets.identity.application.result.AuthResult;
+import com.tickets.managementtickets.identity.application.result.AuthenticatedUserResponse;
 import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.identity.domain.model.RefreshToken;
 import com.tickets.managementtickets.identity.domain.model.Role;
@@ -131,7 +134,7 @@ public class AuthService {
         });
     }
 
-    public UserResponse me() {
+    public AuthenticatedUserResponse me() {
         return transactionRunner.readOnly(() -> toUserResponse(currentUserProvider.requireCurrentUser()));
     }
 
@@ -190,28 +193,13 @@ public class AuthService {
         );
     }
 
-    private UserResponse toUserResponse(AuthenticatedUser user) {
+    private AuthenticatedUserResponse toUserResponse(AuthenticatedUser user) {
         List<String> permissions = user.permissions().stream().map(Permission::name).toList();
-        return new UserResponse(user.id(), user.firstName(), user.lastName(), user.email(), user.role(), permissions);
+        return new AuthenticatedUserResponse(user.id(), user.firstName(), user.lastName(), user.email(), user.role(), permissions);
     }
 
     private String normalizeEmail(String email) {
         return email == null ? "" : email.trim().toLowerCase();
     }
 
-    public record AuthResponse(String accessToken, Instant expiresAt, UserResponse user) {
-    }
-
-    public record UserResponse(
-        String id,
-        String firstName,
-        String lastName,
-        String email,
-        Role role,
-        List<String> permissions
-    ) {
-    }
-
-    public record AuthResult(AuthResponse response, AuthCookie refreshCookie) {
-    }
 }

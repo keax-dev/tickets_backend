@@ -14,7 +14,6 @@ import com.tickets.managementtickets.shared.application.exception.NotFoundExcept
 import com.tickets.managementtickets.shared.application.exception.UnauthorizedException;
 import com.tickets.managementtickets.shared.application.exception.ValidationException;
 import com.tickets.managementtickets.shared.application.model.PageResponse;
-import com.tickets.managementtickets.shared.application.model.SortDirection;
 import com.tickets.managementtickets.shared.application.port.HashingService;
 import com.tickets.managementtickets.shared.application.port.JsonCodec;
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;

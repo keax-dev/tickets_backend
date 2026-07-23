@@ -7,7 +7,9 @@ import com.tickets.managementtickets.shared.application.exception.ConflictExcept
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.exception.ValidationException;
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;
+import com.tickets.managementtickets.sla.application.command.UpdateSlaPolicyRequest;
 import com.tickets.managementtickets.sla.application.port.SlaPolicyRepositoryPort;
+import com.tickets.managementtickets.sla.application.result.SlaPolicyResponse;
 import com.tickets.managementtickets.sla.domain.model.SlaPolicy;
 import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 
@@ -75,16 +77,4 @@ public class SlaPolicyService {
         );
     }
 
-    public record UpdateSlaPolicyRequest(long version, int firstResponseHours, int resolutionHours, boolean active) {
-    }
-
-    public record SlaPolicyResponse(
-        String id,
-        TicketPriority priority,
-        int firstResponseHours,
-        int resolutionHours,
-        boolean active,
-        long version
-    ) {
-    }
 }

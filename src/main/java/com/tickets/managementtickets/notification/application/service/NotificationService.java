@@ -4,6 +4,7 @@ import com.tickets.managementtickets.identity.application.model.AuthenticatedUse
 import com.tickets.managementtickets.identity.application.service.AuthorizationService;
 import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.notification.application.port.NotificationRepositoryPort;
+import com.tickets.managementtickets.notification.application.result.NotificationResponse;
 import com.tickets.managementtickets.notification.domain.model.Notification;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.model.PageResponse;
@@ -70,15 +71,4 @@ public class NotificationService {
         );
     }
 
-    public record NotificationResponse(
-        String id,
-        com.tickets.managementtickets.notification.domain.model.NotificationType type,
-        String title,
-        String message,
-        String relatedTicketId,
-        boolean read,
-        java.time.Instant createdAt,
-        java.time.Instant readAt
-    ) {
-    }
 }

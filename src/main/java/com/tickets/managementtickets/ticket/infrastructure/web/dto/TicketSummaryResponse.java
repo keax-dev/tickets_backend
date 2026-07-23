@@ -1,6 +1,5 @@
 package com.tickets.managementtickets.ticket.infrastructure.web.dto;
 
-import com.tickets.managementtickets.ticket.application.service.TicketService;
 import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
@@ -26,7 +25,7 @@ public record TicketSummaryResponse(
     long version
 ) {
 
-    public static TicketSummaryResponse from(TicketService.TicketSummaryResponse response) {
+    public static TicketSummaryResponse from(com.tickets.managementtickets.ticket.application.result.TicketSummaryResponse response) {
         return new TicketSummaryResponse(
             response.id(),
             response.code(),

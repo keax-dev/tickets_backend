@@ -1,7 +1,5 @@
 package com.tickets.managementtickets.category.infrastructure.web.dto;
 
-import com.tickets.managementtickets.category.application.service.CategoryService;
-
 import java.time.Instant;
 
 public record CategoryResponse(
@@ -14,7 +12,7 @@ public record CategoryResponse(
     Instant updatedAt
 ) {
 
-    public static CategoryResponse from(CategoryService.CategoryResponse response) {
+    public static CategoryResponse from(com.tickets.managementtickets.category.application.result.CategoryResponse response) {
         return new CategoryResponse(
             response.id(),
             response.name(),

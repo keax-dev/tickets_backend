@@ -47,7 +47,7 @@ public class UserController {
         return UserResponse.from(
             userManagementService.create(
                 currentUserProvider.requireCurrentUser(),
-                new UserManagementService.CreateUserRequest(
+                new com.tickets.managementtickets.identity.application.command.CreateUserRequest(
                     request.firstName(),
                     request.lastName(),
                     request.email(),
@@ -67,7 +67,7 @@ public class UserController {
             userManagementService.update(
                 currentUserProvider.requireCurrentUser(),
                 userId,
-                new UserManagementService.UpdateUserRequest(
+                new com.tickets.managementtickets.identity.application.command.UpdateUserRequest(
                     request.version(),
                     request.firstName(),
                     request.lastName(),
@@ -87,7 +87,7 @@ public class UserController {
             userManagementService.updateStatus(
                 currentUserProvider.requireCurrentUser(),
                 userId,
-                new UserManagementService.StatusUpdateRequest(request.version(), request.active())
+                new com.tickets.managementtickets.identity.application.command.StatusUpdateRequest(request.version(), request.active())
             )
         );
     }

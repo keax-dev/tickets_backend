@@ -1,5 +1,7 @@
 package com.tickets.managementtickets.category.infrastructure.web.controller;
 
+import com.tickets.managementtickets.category.application.command.StatusUpdateRequest;
+import com.tickets.managementtickets.category.application.command.UpsertCategoryRequest;
 import com.tickets.managementtickets.category.application.service.CategoryService;
 import com.tickets.managementtickets.category.infrastructure.web.dto.CategoryRequest;
 import com.tickets.managementtickets.category.infrastructure.web.dto.CategoryResponse;
@@ -41,7 +43,7 @@ public class CategoryController {
         return CategoryResponse.from(
             categoryService.create(
                 currentUserProvider.requireCurrentUser(),
-                new CategoryService.UpsertCategoryRequest(0, request.name(), request.description())
+                new UpsertCategoryRequest(0, request.name(), request.description())
             )
         );
     }
@@ -55,7 +57,7 @@ public class CategoryController {
             categoryService.update(
                 currentUserProvider.requireCurrentUser(),
                 categoryId,
-                new CategoryService.UpsertCategoryRequest(request.version(), request.name(), request.description())
+                new UpsertCategoryRequest(request.version(), request.name(), request.description())
             )
         );
     }
@@ -69,7 +71,7 @@ public class CategoryController {
             categoryService.updateStatus(
                 currentUserProvider.requireCurrentUser(),
                 categoryId,
-                new CategoryService.StatusUpdateRequest(request.version(), request.active())
+                new StatusUpdateRequest(request.version(), request.active())
             )
         );
     }

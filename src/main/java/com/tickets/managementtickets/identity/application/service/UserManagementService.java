@@ -1,16 +1,18 @@
 package com.tickets.managementtickets.identity.application.service;
 
+import com.tickets.managementtickets.identity.application.command.CreateUserRequest;
+import com.tickets.managementtickets.identity.application.command.StatusUpdateRequest;
+import com.tickets.managementtickets.identity.application.command.UpdateUserRequest;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.application.port.UserRepositoryPort;
+import com.tickets.managementtickets.identity.application.result.UserResponse;
 import com.tickets.managementtickets.identity.domain.model.Permission;
-import com.tickets.managementtickets.identity.domain.model.Role;
 import com.tickets.managementtickets.identity.domain.model.User;
 import com.tickets.managementtickets.shared.application.exception.ConflictException;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.port.PasswordHashingService;
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 
-import java.time.Instant;
 import java.util.List;
 
 public class UserManagementService {
@@ -124,24 +126,4 @@ public class UserManagementService {
         );
     }
 
-    public record CreateUserRequest(String firstName, String lastName, String email, String password, Role role) {
-    }
-
-    public record UpdateUserRequest(long version, String firstName, String lastName, String email, Role role) {
-    }
-
-    public record StatusUpdateRequest(long version, boolean active) {
-    }
-
-    public record UserResponse(
-        String id,
-        String firstName,
-        String lastName,
-        String email,
-        Role role,
-        boolean active,
-        Instant lastLoginAt,
-        long version
-    ) {
-    }
 }

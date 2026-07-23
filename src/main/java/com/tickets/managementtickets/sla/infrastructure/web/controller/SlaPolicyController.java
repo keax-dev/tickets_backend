@@ -43,7 +43,7 @@ public class SlaPolicyController {
             slaPolicyService.update(
                 currentUserProvider.requireCurrentUser(),
                 priority,
-                new SlaPolicyService.UpdateSlaPolicyRequest(
+                new com.tickets.managementtickets.sla.application.command.UpdateSlaPolicyRequest(
                     request.version(),
                     request.firstResponseHours(),
                     request.resolutionHours(),

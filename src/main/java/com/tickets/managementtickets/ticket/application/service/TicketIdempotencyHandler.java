@@ -4,8 +4,10 @@ import com.tickets.managementtickets.shared.application.exception.ConflictExcept
 import com.tickets.managementtickets.shared.application.exception.ValidationException;
 import com.tickets.managementtickets.shared.application.port.HashingService;
 import com.tickets.managementtickets.shared.application.port.JsonCodec;
+import com.tickets.managementtickets.ticket.application.command.CreateTicketRequest;
 import com.tickets.managementtickets.ticket.application.port.IdempotencyPolicy;
 import com.tickets.managementtickets.ticket.application.port.IdempotencyRecordRepositoryPort;
+import com.tickets.managementtickets.ticket.application.result.TicketDetailResponse;
 import com.tickets.managementtickets.ticket.domain.model.IdempotencyRecord;
 
 import java.time.Clock;
@@ -40,7 +42,7 @@ final class TicketIdempotencyHandler {
         }
     }
 
-    String hashCreateRequest(String userId, TicketService.CreateTicketRequest request) {
+    String hashCreateRequest(String userId, CreateTicketRequest request) {
         return hashingService.hash(
             userId + "|"
                 + normalize(request.title()) + "|"
@@ -50,7 +52,7 @@ final class TicketIdempotencyHandler {
         );
     }
 
-    Optional<TicketService.TicketDetailResponse> findStoredCreateResponse(
+    Optional<TicketDetailResponse> findStoredCreateResponse(
         String idempotencyKey,
         String userId,
         String requestHash
@@ -64,7 +66,7 @@ final class TicketIdempotencyHandler {
         if (!record.requestHash().equals(requestHash)) {
             throw new ConflictException("IDEMPOTENCY_KEY_CONFLICT", "The idempotency key was already used with a different payload.");
         }
-        return Optional.of(jsonCodec.deserialize(record.responseBody(), TicketService.TicketDetailResponse.class));
+        return Optional.of(jsonCodec.deserialize(record.responseBody(), TicketDetailResponse.class));
     }
 
     void storeCreateResponse(
@@ -72,7 +74,7 @@ final class TicketIdempotencyHandler {
         String userId,
         String requestHash,
         String resourceId,
-        TicketService.TicketDetailResponse response
+        TicketDetailResponse response
     ) {
         idempotencyRecordRepository.save(IdempotencyRecord.create(
             idempotencyKey,

@@ -1,6 +1,5 @@
 package com.tickets.managementtickets.ticket.infrastructure.web.dto;
 
-import com.tickets.managementtickets.ticket.application.service.TicketService;
 import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
@@ -37,7 +36,7 @@ public record TicketDetailResponse(
     List<String> availableActions
 ) {
 
-    public static TicketDetailResponse from(TicketService.TicketDetailResponse response) {
+    public static TicketDetailResponse from(com.tickets.managementtickets.ticket.application.result.TicketDetailResponse response) {
         return new TicketDetailResponse(
             response.id(),
             response.code(),

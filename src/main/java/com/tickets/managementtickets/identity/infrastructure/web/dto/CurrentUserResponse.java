@@ -1,6 +1,5 @@
 package com.tickets.managementtickets.identity.infrastructure.web.dto;
 
-import com.tickets.managementtickets.identity.application.service.AuthService;
 import com.tickets.managementtickets.identity.domain.model.Role;
 
 import java.util.List;
@@ -14,7 +13,7 @@ public record CurrentUserResponse(
     List<String> permissions
 ) {
 
-    public static CurrentUserResponse from(AuthService.UserResponse response) {
+    public static CurrentUserResponse from(com.tickets.managementtickets.identity.application.result.AuthenticatedUserResponse response) {
         return new CurrentUserResponse(
             response.id(),
             response.firstName(),
