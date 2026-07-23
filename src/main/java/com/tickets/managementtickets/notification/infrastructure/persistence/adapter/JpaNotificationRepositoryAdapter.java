@@ -16,16 +16,18 @@ import java.util.Optional;
 public class JpaNotificationRepositoryAdapter implements NotificationRepositoryPort {
 
     private final NotificationRepository repository;
+    private final NotificationPersistenceMapper mapper;
 
     public JpaNotificationRepositoryAdapter(NotificationRepository repository) {
         this.repository = repository;
+        this.mapper = new NotificationPersistenceMapper();
     }
 
     @Override
     public PageResponse<Notification> findAllByRecipientIdOrderByCreatedAtDesc(String recipientId, int page, int size) {
         Page<Notification> notificationPage = repository
             .findAllByRecipientIdOrderByCreatedAtDesc(recipientId, PageRequest.of(page, size))
-            .map(this::toDomain);
+            .map(mapper::toDomain);
 
         return PageResponse.of(
             notificationPage.getContent(),
@@ -39,47 +41,19 @@ public class JpaNotificationRepositoryAdapter implements NotificationRepositoryP
 
     @Override
     public Optional<Notification> findByIdAndRecipientId(String id, String recipientId) {
-        return repository.findByIdAndRecipientId(id, recipientId).map(this::toDomain);
+        return repository.findByIdAndRecipientId(id, recipientId).map(mapper::toDomain);
     }
 
     @Override
     public List<Notification> findAllByRecipientIdAndReadFalse(String recipientId) {
-        return repository.findAllByRecipientIdAndReadFalse(recipientId).stream().map(this::toDomain).toList();
+        return repository.findAllByRecipientIdAndReadFalse(recipientId).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public Notification save(Notification notification) {
-        return toDomain(repository.save(toEntity(notification)));
-    }
-
-    private Notification toDomain(NotificationEntity entity) {
-        return new Notification(
-            entity.getId(),
-            entity.getRecipientId(),
-            entity.getType(),
-            entity.getTitle(),
-            entity.getMessage(),
-            entity.getRelatedTicketId(),
-            entity.isRead(),
-            entity.getCreatedAt(),
-            entity.getReadAt()
-        );
-    }
-
-    private NotificationEntity toEntity(Notification notification) {
         NotificationEntity entity = notification.id() == null
             ? new NotificationEntity()
             : repository.findById(notification.id()).orElseGet(NotificationEntity::new);
-        if (notification.id() != null) {
-            entity.setId(notification.id());
-        }
-        entity.setRecipientId(notification.recipientId());
-        entity.setType(notification.type());
-        entity.setTitle(notification.title());
-        entity.setMessage(notification.message());
-        entity.setRelatedTicketId(notification.relatedTicketId());
-        entity.setRead(notification.read());
-        entity.setReadAt(notification.readAt());
-        return entity;
+        return mapper.toDomain(repository.save(mapper.toEntity(notification, entity)));
     }
 }

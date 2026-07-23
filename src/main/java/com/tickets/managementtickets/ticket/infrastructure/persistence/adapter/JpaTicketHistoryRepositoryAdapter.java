@@ -15,14 +15,16 @@ import java.util.List;
 public class JpaTicketHistoryRepositoryAdapter implements TicketHistoryRepositoryPort {
 
     private final TicketHistoryRepository repository;
+    private final TicketHistoryPersistenceMapper mapper;
 
     public JpaTicketHistoryRepositoryAdapter(TicketHistoryRepository repository) {
         this.repository = repository;
+        this.mapper = new TicketHistoryPersistenceMapper();
     }
 
     @Override
     public List<TicketHistory> findAllByTicketIdOrderByCreatedAtDesc(String ticketId) {
-        return repository.findAllByTicketIdOrderByCreatedAtDesc(ticketId).stream().map(this::toDomain).toList();
+        return repository.findAllByTicketIdOrderByCreatedAtDesc(ticketId).stream().map(mapper::toDomain).toList();
     }
 
     @Override
@@ -32,35 +34,11 @@ public class JpaTicketHistoryRepositoryAdapter implements TicketHistoryRepositor
             case ALL -> repository.findAllByOrderByCreatedAtDesc(pageRequest);
             case ASSIGNED_OR_UNASSIGNED -> repository.findRecentVisibleForAssignedUser(currentUserId, pageRequest);
             case REQUESTER -> repository.findRecentVisibleForRequester(currentUserId, pageRequest);
-        }).stream().map(this::toDomain).toList();
+        }).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public TicketHistory save(TicketHistory history) {
-        return toDomain(repository.save(toEntity(history)));
-    }
-
-    private TicketHistory toDomain(TicketHistoryEntity entity) {
-        return new TicketHistory(
-            entity.getId(),
-            entity.getTicketId(),
-            entity.getAction(),
-            entity.getPerformedBy(),
-            entity.getPreviousValue(),
-            entity.getNewValue(),
-            entity.getMetadataJson(),
-            entity.getCreatedAt()
-        );
-    }
-
-    private TicketHistoryEntity toEntity(TicketHistory history) {
-        TicketHistoryEntity entity = new TicketHistoryEntity();
-        entity.setTicketId(history.ticketId());
-        entity.setAction(history.action());
-        entity.setPerformedBy(history.performedBy());
-        entity.setPreviousValue(history.previousValue());
-        entity.setNewValue(history.newValue());
-        entity.setMetadataJson(history.metadataJson());
-        return entity;
+        return mapper.toDomain(repository.save(mapper.toEntity(history)));
     }
 }

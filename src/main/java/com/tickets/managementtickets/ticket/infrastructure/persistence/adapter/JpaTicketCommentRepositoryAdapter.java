@@ -12,44 +12,23 @@ import java.util.List;
 public class JpaTicketCommentRepositoryAdapter implements TicketCommentRepositoryPort {
 
     private final TicketCommentRepository repository;
+    private final TicketCommentPersistenceMapper mapper;
 
     public JpaTicketCommentRepositoryAdapter(TicketCommentRepository repository) {
         this.repository = repository;
+        this.mapper = new TicketCommentPersistenceMapper();
     }
 
     @Override
     public List<TicketComment> findAllByTicketIdOrderByCreatedAtAsc(String ticketId) {
-        return repository.findAllByTicketIdOrderByCreatedAtAsc(ticketId).stream().map(this::toDomain).toList();
+        return repository.findAllByTicketIdOrderByCreatedAtAsc(ticketId).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public TicketComment save(TicketComment comment) {
-        return toDomain(repository.save(toEntity(comment)));
-    }
-
-    private TicketComment toDomain(TicketCommentEntity entity) {
-        return new TicketComment(
-            entity.getId(),
-            entity.getTicketId(),
-            entity.getAuthorId(),
-            entity.getContent(),
-            entity.getVisibility(),
-            entity.getCreatedAt(),
-            entity.getUpdatedAt()
-        );
-    }
-
-    private TicketCommentEntity toEntity(TicketComment comment) {
         TicketCommentEntity entity = comment.id() == null
             ? new TicketCommentEntity()
             : repository.findById(comment.id()).orElseGet(TicketCommentEntity::new);
-        if (comment.id() != null) {
-            entity.setId(comment.id());
-        }
-        entity.setTicketId(comment.ticketId());
-        entity.setAuthorId(comment.authorId());
-        entity.setContent(comment.content());
-        entity.setVisibility(comment.visibility());
-        return entity;
+        return mapper.toDomain(repository.save(mapper.toEntity(comment, entity)));
     }
 }

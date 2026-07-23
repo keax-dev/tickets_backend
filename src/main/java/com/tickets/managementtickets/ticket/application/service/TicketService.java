@@ -160,7 +160,7 @@ public class TicketService {
         return transactionRunner.readOnly(() -> {
             Ticket ticket = findTicket(ticketId);
             accessPolicy.ensureCanViewTicket(currentUser, ticket);
-            return toDetailResponse(ticket, currentUser);
+            return buildDetailResponse(ticket, currentUser);
         });
     }
 
@@ -200,7 +200,7 @@ public class TicketService {
             historyRecorder.created(ticket.getId(), currentUser.id(), ticket.getCode());
             notificationDispatcher.ticketCreated(ticket);
 
-            TicketDetailResponse response = toDetailResponse(ticket, currentUser);
+            TicketDetailResponse response = buildDetailResponse(ticket, currentUser);
             idempotencyHandler.storeCreateResponse(idempotencyKey, currentUser.id(), requestHash, ticket.getId(), response);
             return response;
         });
@@ -239,7 +239,7 @@ public class TicketService {
                 historyRecorder.priorityChanged(ticket.getId(), currentUser.id(), previousPriority.name(), ticket.getPriority().name());
             }
 
-            return toDetailResponse(ticket, currentUser);
+            return buildDetailResponse(ticket, currentUser);
         });
     }
 
@@ -265,7 +265,7 @@ public class TicketService {
 
             historyRecorder.assigned(ticket.getId(), currentUser.id(), previousAgentId, assignee.id());
             notificationDispatcher.ticketAssigned(ticket, assignee.id());
-            return toDetailResponse(ticket, currentUser);
+            return buildDetailResponse(ticket, currentUser);
         });
     }
 
@@ -282,7 +282,7 @@ public class TicketService {
             ticket.start(clock.instant());
             ticket = ticketRepository.save(ticket);
             historyRecorder.started(ticket.getId(), currentUser.id());
-            return toDetailResponse(ticket, currentUser);
+            return buildDetailResponse(ticket, currentUser);
         });
     }
 
@@ -299,7 +299,7 @@ public class TicketService {
             ticket = ticketRepository.save(ticket);
             historyRecorder.requestedInformation(ticket.getId(), currentUser.id());
             notificationDispatcher.informationRequested(ticket);
-            return toDetailResponse(ticket, currentUser);
+            return buildDetailResponse(ticket, currentUser);
         });
     }
 
@@ -319,7 +319,7 @@ public class TicketService {
             ticket = ticketRepository.save(ticket);
             historyRecorder.resolved(ticket.getId(), currentUser.id(), ticket.getResolutionSummary());
             notificationDispatcher.ticketResolved(ticket);
-            return toDetailResponse(ticket, currentUser);
+            return buildDetailResponse(ticket, currentUser);
         });
     }
 
@@ -336,7 +336,7 @@ public class TicketService {
             ticket = ticketRepository.save(ticket);
             historyRecorder.closed(ticket.getId(), currentUser.id());
             notificationDispatcher.ticketClosed(ticket);
-            return toDetailResponse(ticket, currentUser);
+            return buildDetailResponse(ticket, currentUser);
         });
     }
 
@@ -356,7 +356,7 @@ public class TicketService {
             ticket = ticketRepository.save(ticket);
             historyRecorder.reopened(ticket.getId(), currentUser.id(), request.reason());
             notificationDispatcher.ticketReopened(ticket);
-            return toDetailResponse(ticket, currentUser);
+            return buildDetailResponse(ticket, currentUser);
         });
     }
 
@@ -372,7 +372,7 @@ public class TicketService {
             ticket.cancel(clock.instant());
             ticket = ticketRepository.save(ticket);
             historyRecorder.cancelled(ticket.getId(), currentUser.id(), request.reason());
-            return toDetailResponse(ticket, currentUser);
+            return buildDetailResponse(ticket, currentUser);
         });
     }
 
@@ -385,7 +385,7 @@ public class TicketService {
 
             return comments.stream()
                 .filter(comment -> comment.visibility() == CommentVisibility.PUBLIC || accessPolicy.canSeeInternalComments(currentUser))
-                .map(comment -> toCommentResponse(comment, usersById))
+                .map(comment -> buildCommentResponse(comment, usersById))
                 .toList();
         });
     }
@@ -424,7 +424,7 @@ public class TicketService {
             }
 
             Map<String, User> usersById = loadUsersById(List.of(comment.authorId()));
-            return toCommentResponse(comment, usersById);
+            return buildCommentResponse(comment, usersById);
         });
     }
 
@@ -523,7 +523,7 @@ public class TicketService {
             .collect(Collectors.toMap(Category::id, Function.identity()));
     }
 
-    private TicketDetailResponse toDetailResponse(Ticket ticket, AuthenticatedUser currentUser) {
+    private TicketDetailResponse buildDetailResponse(Ticket ticket, AuthenticatedUser currentUser) {
         Map<String, User> usersById = loadUsersById(
             Stream.of(ticket.getRequesterId(), ticket.getAssignedAgentId())
                 .filter(Objects::nonNull)
@@ -533,7 +533,7 @@ public class TicketService {
         return responseMapper.toDetailResponse(ticket, currentUser, usersById, categoriesById);
     }
 
-    private TicketCommentResponse toCommentResponse(TicketComment comment, Map<String, User> usersById) {
+    private TicketCommentResponse buildCommentResponse(TicketComment comment, Map<String, User> usersById) {
         return responseMapper.toCommentResponse(comment, usersById);
     }
 

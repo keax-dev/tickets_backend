@@ -24,9 +24,11 @@ import java.util.Optional;
 public class JpaTicketRepositoryAdapter implements TicketRepositoryPort {
 
     private final TicketRepository repository;
+    private final TicketPersistenceMapper mapper;
 
     public JpaTicketRepositoryAdapter(TicketRepository repository) {
         this.repository = repository;
+        this.mapper = new TicketPersistenceMapper();
     }
 
     @Override
@@ -38,7 +40,7 @@ public class JpaTicketRepositoryAdapter implements TicketRepositoryPort {
                 query.size(),
                 Sort.by(toSpringDirection(query.direction()), query.sortBy())
             )
-        ).map(this::toDomain);
+        ).map(mapper::toDomain);
 
         return PageResponse.of(
             page.getContent(),
@@ -54,12 +56,15 @@ public class JpaTicketRepositoryAdapter implements TicketRepositoryPort {
 
     @Override
     public Optional<Ticket> findById(String id) {
-        return repository.findById(id).map(this::toDomain);
+        return repository.findById(id).map(mapper::toDomain);
     }
 
     @Override
     public Ticket save(Ticket ticket) {
-        return toDomain(repository.save(toEntity(ticket)));
+        TicketEntity entity = ticket.getId() == null
+            ? new TicketEntity()
+            : repository.findById(ticket.getId()).orElseGet(TicketEntity::new);
+        return mapper.toDomain(repository.save(mapper.toEntity(ticket, entity)));
     }
 
     @Override
@@ -69,7 +74,7 @@ public class JpaTicketRepositoryAdapter implements TicketRepositoryPort {
 
     @Override
     public List<Ticket> findAllByStatusAndResolvedAtBefore(TicketStatus status, Instant resolvedAt) {
-        return repository.findAllByStatusAndResolvedAtBefore(status, resolvedAt).stream().map(this::toDomain).toList();
+        return repository.findAllByStatusAndResolvedAtBefore(status, resolvedAt).stream().map(mapper::toDomain).toList();
     }
 
     private Specification<TicketEntity> buildSpecification(TicketQuery query) {
@@ -153,60 +158,4 @@ public class JpaTicketRepositoryAdapter implements TicketRepositoryPort {
         return direction == SortDirection.ASC ? Sort.Direction.ASC : Sort.Direction.DESC;
     }
 
-    private Ticket toDomain(TicketEntity entity) {
-        return new Ticket(
-            entity.getId(),
-            entity.getCode(),
-            entity.getTitle(),
-            entity.getDescription(),
-            entity.getStatus(),
-            entity.getPriority(),
-            entity.getRequesterId(),
-            entity.getAssignedAgentId(),
-            entity.getCategoryId(),
-            entity.getFirstResponseDueAt(),
-            entity.getResolutionDueAt(),
-            entity.getFirstRespondedAt(),
-            entity.getResolvedAt(),
-            entity.getClosedAt(),
-            entity.getCancelledAt(),
-            entity.getSlaPausedAt(),
-            entity.getAccumulatedPausedSeconds(),
-            entity.isSlaFirstResponseBreached(),
-            entity.isSlaResolutionBreached(),
-            entity.getResolutionSummary(),
-            entity.getCreatedAt(),
-            entity.getUpdatedAt(),
-            entity.getVersion()
-        );
-    }
-
-    private TicketEntity toEntity(Ticket ticket) {
-        TicketEntity entity = ticket.getId() == null
-            ? new TicketEntity()
-            : repository.findById(ticket.getId()).orElseGet(TicketEntity::new);
-        if (ticket.getId() != null) {
-            entity.setId(ticket.getId());
-        }
-        entity.setCode(ticket.getCode());
-        entity.setTitle(ticket.getTitle());
-        entity.setDescription(ticket.getDescription());
-        entity.setStatus(ticket.getStatus());
-        entity.setPriority(ticket.getPriority());
-        entity.setRequesterId(ticket.getRequesterId());
-        entity.setAssignedAgentId(ticket.getAssignedAgentId());
-        entity.setCategoryId(ticket.getCategoryId());
-        entity.setFirstResponseDueAt(ticket.getFirstResponseDueAt());
-        entity.setResolutionDueAt(ticket.getResolutionDueAt());
-        entity.setFirstRespondedAt(ticket.getFirstRespondedAt());
-        entity.setResolvedAt(ticket.getResolvedAt());
-        entity.setClosedAt(ticket.getClosedAt());
-        entity.setCancelledAt(ticket.getCancelledAt());
-        entity.setSlaPausedAt(ticket.getSlaPausedAt());
-        entity.setAccumulatedPausedSeconds(ticket.getAccumulatedPausedSeconds());
-        entity.setSlaFirstResponseBreached(ticket.isSlaFirstResponseBreached());
-        entity.setSlaResolutionBreached(ticket.isSlaResolutionBreached());
-        entity.setResolutionSummary(ticket.getResolutionSummary());
-        return entity;
-    }
 }

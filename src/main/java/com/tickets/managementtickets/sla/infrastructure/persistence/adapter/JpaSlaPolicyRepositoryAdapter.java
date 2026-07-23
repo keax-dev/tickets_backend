@@ -14,48 +14,28 @@ import java.util.Optional;
 public class JpaSlaPolicyRepositoryAdapter implements SlaPolicyRepositoryPort {
 
     private final SlaPolicyRepository repository;
+    private final SlaPolicyPersistenceMapper mapper;
 
     public JpaSlaPolicyRepositoryAdapter(SlaPolicyRepository repository) {
         this.repository = repository;
+        this.mapper = new SlaPolicyPersistenceMapper();
     }
 
     @Override
     public List<SlaPolicy> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
+        return repository.findAll().stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public Optional<SlaPolicy> findByPriority(TicketPriority priority) {
-        return repository.findByPriority(priority).map(this::toDomain);
+        return repository.findByPriority(priority).map(mapper::toDomain);
     }
 
     @Override
     public SlaPolicy save(SlaPolicy policy) {
-        return toDomain(repository.save(toEntity(policy)));
-    }
-
-    private SlaPolicy toDomain(SlaPolicyEntity entity) {
-        return new SlaPolicy(
-            entity.getId(),
-            entity.getPriority(),
-            entity.getFirstResponseHours(),
-            entity.getResolutionHours(),
-            entity.isActive(),
-            entity.getVersion()
-        );
-    }
-
-    private SlaPolicyEntity toEntity(SlaPolicy policy) {
         SlaPolicyEntity entity = policy.id() == null
             ? new SlaPolicyEntity()
             : repository.findById(policy.id()).orElseGet(SlaPolicyEntity::new);
-        if (policy.id() != null) {
-            entity.setId(policy.id());
-        }
-        entity.setPriority(policy.priority());
-        entity.setFirstResponseHours(policy.firstResponseHours());
-        entity.setResolutionHours(policy.resolutionHours());
-        entity.setActive(policy.active());
-        return entity;
+        return mapper.toDomain(repository.save(mapper.toEntity(policy, entity)));
     }
 }

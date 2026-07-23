@@ -20,6 +20,7 @@ public class SlaPolicyService {
     private final SlaPolicyRepositoryPort slaPolicyRepository;
     private final AuthorizationService authorizationService;
     private final TransactionRunner transactionRunner;
+    private final SlaPolicyResponseMapper responseMapper;
 
     public SlaPolicyService(
         SlaPolicyRepositoryPort slaPolicyRepository,
@@ -29,6 +30,7 @@ public class SlaPolicyService {
         this.slaPolicyRepository = slaPolicyRepository;
         this.authorizationService = authorizationService;
         this.transactionRunner = transactionRunner;
+        this.responseMapper = new SlaPolicyResponseMapper();
     }
 
     public List<SlaPolicyResponse> list(AuthenticatedUser currentUser) {
@@ -36,7 +38,7 @@ public class SlaPolicyService {
             authorizationService.requirePermission(currentUser, Permission.SLA_READ);
             return slaPolicyRepository.findAll()
                 .stream()
-                .map(this::toResponse)
+                .map(responseMapper::toResponse)
                 .toList();
         });
     }
@@ -52,7 +54,7 @@ public class SlaPolicyService {
                 .orElseThrow(() -> new NotFoundException("SLA_POLICY_NOT_FOUND", "The SLA policy could not be found."));
             ensureVersion(policy.version(), request.version(), "The SLA policy was modified by another request.");
 
-            return toResponse(slaPolicyRepository.save(policy.update(
+            return responseMapper.toResponse(slaPolicyRepository.save(policy.update(
                 request.firstResponseHours(),
                 request.resolutionHours(),
                 request.active()
@@ -64,17 +66,6 @@ public class SlaPolicyService {
         if (currentVersion != requestedVersion) {
             throw new ConflictException("RESOURCE_VERSION_CONFLICT", message);
         }
-    }
-
-    private SlaPolicyResponse toResponse(SlaPolicy policy) {
-        return new SlaPolicyResponse(
-            policy.id(),
-            policy.priority(),
-            policy.firstResponseHours(),
-            policy.resolutionHours(),
-            policy.active(),
-            policy.version()
-        );
     }
 
 }

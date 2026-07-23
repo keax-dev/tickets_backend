@@ -18,6 +18,7 @@ public class NotificationService {
     private final AuthorizationService authorizationService;
     private final Clock clock;
     private final TransactionRunner transactionRunner;
+    private final NotificationResponseMapper responseMapper;
 
     public NotificationService(
         NotificationRepositoryPort notificationRepository,
@@ -29,6 +30,7 @@ public class NotificationService {
         this.authorizationService = authorizationService;
         this.clock = clock;
         this.transactionRunner = transactionRunner;
+        this.responseMapper = new NotificationResponseMapper();
     }
 
     public PageResponse<NotificationResponse> list(AuthenticatedUser currentUser, int page, int size) {
@@ -36,7 +38,7 @@ public class NotificationService {
             authorizationService.requirePermission(currentUser, Permission.NOTIFICATION_READ);
             return notificationRepository
                 .findAllByRecipientIdOrderByCreatedAtDesc(currentUser.id(), page, size)
-                .map(this::toResponse);
+                .map(responseMapper::toResponse);
         });
     }
 
@@ -46,7 +48,7 @@ public class NotificationService {
             Notification notification = notificationRepository.findByIdAndRecipientId(notificationId, currentUser.id())
                 .orElseThrow(() -> new NotFoundException("NOTIFICATION_NOT_FOUND", "The notification could not be found."));
 
-            return toResponse(notificationRepository.save(notification.markAsRead(clock.instant())));
+            return responseMapper.toResponse(notificationRepository.save(notification.markAsRead(clock.instant())));
         });
     }
 
@@ -56,19 +58,6 @@ public class NotificationService {
             notificationRepository.findAllByRecipientIdAndReadFalse(currentUser.id())
                 .forEach(notification -> notificationRepository.save(notification.markAsRead(clock.instant())));
         });
-    }
-
-    private NotificationResponse toResponse(Notification notification) {
-        return new NotificationResponse(
-            notification.id(),
-            notification.type(),
-            notification.title(),
-            notification.message(),
-            notification.relatedTicketId(),
-            notification.read(),
-            notification.createdAt(),
-            notification.readAt()
-        );
     }
 
 }

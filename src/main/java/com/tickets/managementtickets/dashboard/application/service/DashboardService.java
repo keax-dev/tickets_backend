@@ -36,6 +36,7 @@ public class DashboardService {
     private final AuthorizationService authorizationService;
     private final Clock clock;
     private final TransactionRunner transactionRunner;
+    private final DashboardResponseMapper responseMapper;
 
     public DashboardService(
         TicketRepositoryPort ticketRepository,
@@ -51,6 +52,7 @@ public class DashboardService {
         this.authorizationService = authorizationService;
         this.clock = clock;
         this.transactionRunner = transactionRunner;
+        this.responseMapper = new DashboardResponseMapper();
     }
 
     public DashboardSummaryResponse summary(AuthenticatedUser currentUser) {
@@ -79,7 +81,7 @@ public class DashboardService {
             long dueSoonTickets = ticketRepository.count(baseQuery.resolutionDueBetween(now, now.plus(DUE_SOON_WINDOW_HOURS, ChronoUnit.HOURS)));
             long assignedToCurrentUser = ticketRepository.count(baseQuery.assignedTo(currentUser.id()));
 
-            return new DashboardSummaryResponse(
+            return responseMapper.toSummaryResponse(
                 activeTickets,
                 createdToday,
                 unassignedTickets,
@@ -105,13 +107,7 @@ public class DashboardService {
             ).stream().collect(Collectors.toMap(User::id, user -> user));
 
             return historyEntries.stream()
-                .map(entry -> new RecentActivityResponse(
-                    entry.id(),
-                    entry.ticketId(),
-                    entry.action(),
-                    usersById.containsKey(entry.performedBy()) ? usersById.get(entry.performedBy()).displayName() : null,
-                    entry.createdAt()
-                ))
+                .map(entry -> responseMapper.toRecentActivityResponse(entry, usersById))
                 .toList();
         });
     }

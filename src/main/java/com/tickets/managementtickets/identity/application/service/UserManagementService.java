@@ -21,6 +21,7 @@ public class UserManagementService {
     private final AuthorizationService authorizationService;
     private final PasswordHashingService passwordHashingService;
     private final TransactionRunner transactionRunner;
+    private final IdentityResponseMapper responseMapper;
 
     public UserManagementService(
         UserRepositoryPort userRepository,
@@ -32,6 +33,7 @@ public class UserManagementService {
         this.authorizationService = authorizationService;
         this.passwordHashingService = passwordHashingService;
         this.transactionRunner = transactionRunner;
+        this.responseMapper = new IdentityResponseMapper();
     }
 
     public List<UserResponse> list(AuthenticatedUser currentUser) {
@@ -39,7 +41,7 @@ public class UserManagementService {
             authorizationService.requirePermission(currentUser, Permission.USER_READ);
             return userRepository.findAll()
                 .stream()
-                .map(this::toResponse)
+                .map(responseMapper::toUserResponse)
                 .toList();
         });
     }
@@ -47,7 +49,7 @@ public class UserManagementService {
     public UserResponse getById(AuthenticatedUser currentUser, String userId) {
         return transactionRunner.readOnly(() -> {
             authorizationService.requirePermission(currentUser, Permission.USER_READ);
-            return toResponse(userRepository.findById(userId)
+            return responseMapper.toUserResponse(userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "The user could not be found.")));
         });
     }
@@ -64,7 +66,7 @@ public class UserManagementService {
                 passwordHashingService.encode(request.password()),
                 request.role()
             );
-            return toResponse(userRepository.save(user));
+            return responseMapper.toUserResponse(userRepository.save(user));
         });
     }
 
@@ -76,7 +78,7 @@ public class UserManagementService {
             ensureVersion(user.version(), request.version(), "The user was modified by another request.");
 
             ensureEmailIsUnique(request.email(), userId);
-            return toResponse(userRepository.save(user.updateProfile(
+            return responseMapper.toUserResponse(userRepository.save(user.updateProfile(
                 request.firstName().trim(),
                 request.lastName().trim(),
                 normalizeEmail(request.email()),
@@ -91,7 +93,7 @@ public class UserManagementService {
             User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "The user could not be found."));
             ensureVersion(user.version(), request.version(), "The user was modified by another request.");
-            return toResponse(userRepository.save(user.withActive(request.active())));
+            return responseMapper.toUserResponse(userRepository.save(user.withActive(request.active())));
         });
     }
 
@@ -111,19 +113,6 @@ public class UserManagementService {
         if (currentVersion != requestedVersion) {
             throw new ConflictException("RESOURCE_VERSION_CONFLICT", message);
         }
-    }
-
-    private UserResponse toResponse(User user) {
-        return new UserResponse(
-            user.id(),
-            user.firstName(),
-            user.lastName(),
-            user.email(),
-            user.role(),
-            user.active(),
-            user.lastLoginAt(),
-            user.version()
-        );
     }
 
 }

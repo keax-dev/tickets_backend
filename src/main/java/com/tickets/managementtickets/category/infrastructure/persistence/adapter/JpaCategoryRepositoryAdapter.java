@@ -13,58 +13,38 @@ import java.util.Optional;
 public class JpaCategoryRepositoryAdapter implements CategoryRepositoryPort {
 
     private final CategoryRepository repository;
+    private final CategoryPersistenceMapper mapper;
 
     public JpaCategoryRepositoryAdapter(CategoryRepository repository) {
         this.repository = repository;
+        this.mapper = new CategoryPersistenceMapper();
     }
 
     @Override
     public List<Category> findAll() {
-        return repository.findAll().stream().map(this::toDomain).toList();
+        return repository.findAll().stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public List<Category> findAllById(Iterable<String> ids) {
-        return repository.findAllById(ids).stream().map(this::toDomain).toList();
+        return repository.findAllById(ids).stream().map(mapper::toDomain).toList();
     }
 
     @Override
     public Optional<Category> findById(String id) {
-        return repository.findById(id).map(this::toDomain);
+        return repository.findById(id).map(mapper::toDomain);
     }
 
     @Override
     public Optional<Category> findByNameIgnoreCase(String name) {
-        return repository.findByNameIgnoreCase(name).map(this::toDomain);
+        return repository.findByNameIgnoreCase(name).map(mapper::toDomain);
     }
 
     @Override
     public Category save(Category category) {
-        return toDomain(repository.save(toEntity(category)));
-    }
-
-    private Category toDomain(CategoryEntity entity) {
-        return new Category(
-            entity.getId(),
-            entity.getName(),
-            entity.getDescription(),
-            entity.isActive(),
-            entity.getVersion(),
-            entity.getCreatedAt(),
-            entity.getUpdatedAt()
-        );
-    }
-
-    private CategoryEntity toEntity(Category category) {
         CategoryEntity entity = category.id() == null
             ? new CategoryEntity()
             : repository.findById(category.id()).orElseGet(CategoryEntity::new);
-        if (category.id() != null) {
-            entity.setId(category.id());
-        }
-        entity.setName(category.name());
-        entity.setDescription(category.description());
-        entity.setActive(category.active());
-        return entity;
+        return mapper.toDomain(repository.save(mapper.toEntity(category, entity)));
     }
 }

@@ -8,10 +8,8 @@ import com.tickets.managementtickets.identity.application.port.CurrentAuthentica
 import com.tickets.managementtickets.identity.application.port.RefreshTokenRepositoryPort;
 import com.tickets.managementtickets.identity.application.port.RefreshTokenGenerator;
 import com.tickets.managementtickets.identity.application.port.UserRepositoryPort;
-import com.tickets.managementtickets.identity.application.result.AuthResponse;
 import com.tickets.managementtickets.identity.application.result.AuthResult;
 import com.tickets.managementtickets.identity.application.result.AuthenticatedUserResponse;
-import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.identity.domain.model.RefreshToken;
 import com.tickets.managementtickets.identity.domain.model.Role;
 import com.tickets.managementtickets.identity.domain.model.User;
@@ -24,7 +22,6 @@ import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
 
 public class AuthService {
 
@@ -39,6 +36,7 @@ public class AuthService {
     private final CurrentAuthenticatedUserProvider currentUserProvider;
     private final Clock clock;
     private final TransactionRunner transactionRunner;
+    private final IdentityResponseMapper responseMapper;
 
     public AuthService(
         UserRepositoryPort userRepository,
@@ -64,6 +62,7 @@ public class AuthService {
         this.currentUserProvider = currentUserProvider;
         this.clock = clock;
         this.transactionRunner = transactionRunner;
+        this.responseMapper = new IdentityResponseMapper();
     }
 
     public AuthResult login(String email, String password) {
@@ -135,7 +134,7 @@ public class AuthService {
     }
 
     public AuthenticatedUserResponse me() {
-        return transactionRunner.readOnly(() -> toUserResponse(currentUserProvider.requireCurrentUser()));
+        return transactionRunner.readOnly(() -> responseMapper.toAuthenticatedUserResponse(currentUserProvider.requireCurrentUser()));
     }
 
     public AuthCookie clearRefreshCookie() {
@@ -160,10 +159,10 @@ public class AuthService {
         }
 
         return new AuthResult(
-            new AuthResponse(
+            responseMapper.toAuthResponse(
                 accessTokenService.generateAccessToken(user),
                 accessTokenService.resolveAccessTokenExpiration(),
-                toUserResponse(user)
+                user
             ),
             refreshCookie(rawRefreshToken, securityProperties.getRefreshTokenExpirationDays() * 24L * 60L * 60L)
         );
@@ -191,11 +190,6 @@ public class AuthService {
             role,
             rolePermissionService.resolvePermissions(role)
         );
-    }
-
-    private AuthenticatedUserResponse toUserResponse(AuthenticatedUser user) {
-        List<String> permissions = user.permissions().stream().map(Permission::name).toList();
-        return new AuthenticatedUserResponse(user.id(), user.firstName(), user.lastName(), user.email(), user.role(), permissions);
     }
 
     private String normalizeEmail(String email) {

@@ -19,6 +19,7 @@ public class CategoryService {
     private final CategoryRepositoryPort categoryRepository;
     private final AuthorizationService authorizationService;
     private final TransactionRunner transactionRunner;
+    private final CategoryResponseMapper responseMapper;
 
     public CategoryService(
         CategoryRepositoryPort categoryRepository,
@@ -28,6 +29,7 @@ public class CategoryService {
         this.categoryRepository = categoryRepository;
         this.authorizationService = authorizationService;
         this.transactionRunner = transactionRunner;
+        this.responseMapper = new CategoryResponseMapper();
     }
 
     public List<CategoryResponse> list(AuthenticatedUser currentUser) {
@@ -36,7 +38,7 @@ public class CategoryService {
             return categoryRepository.findAll()
                 .stream()
                 .filter(category -> currentUser.hasPermission(Permission.CATEGORY_UPDATE) || currentUser.hasPermission(Permission.CATEGORY_DISABLE) || category.active())
-                .map(this::toResponse)
+                .map(responseMapper::toResponse)
                 .toList();
         });
     }
@@ -47,7 +49,7 @@ public class CategoryService {
             ensureUniqueName(request.name(), null);
 
             Category category = Category.create(normalizeName(request.name()), request.description());
-            return toResponse(categoryRepository.save(category));
+            return responseMapper.toResponse(categoryRepository.save(category));
         });
     }
 
@@ -59,7 +61,7 @@ public class CategoryService {
             ensureVersion(category.version(), request.version(), "The category was modified by another request.");
 
             ensureUniqueName(request.name(), categoryId);
-            return toResponse(categoryRepository.save(category.update(normalizeName(request.name()), request.description())));
+            return responseMapper.toResponse(categoryRepository.save(category.update(normalizeName(request.name()), request.description())));
         });
     }
 
@@ -69,7 +71,7 @@ public class CategoryService {
             Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "The category could not be found."));
             ensureVersion(category.version(), request.version(), "The category was modified by another request.");
-            return toResponse(categoryRepository.save(category.withActive(request.active())));
+            return responseMapper.toResponse(categoryRepository.save(category.withActive(request.active())));
         });
     }
 
@@ -89,18 +91,6 @@ public class CategoryService {
         if (currentVersion != requestedVersion) {
             throw new ConflictException("RESOURCE_VERSION_CONFLICT", message);
         }
-    }
-
-    private CategoryResponse toResponse(Category category) {
-        return new CategoryResponse(
-            category.id(),
-            category.name(),
-            category.description(),
-            category.active(),
-            category.version(),
-            category.createdAt(),
-            category.updatedAt()
-        );
     }
 
 }

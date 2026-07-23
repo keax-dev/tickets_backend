@@ -13,19 +13,21 @@ import java.util.Optional;
 public class JpaIdempotencyRecordRepositoryAdapter implements IdempotencyRecordRepositoryPort {
 
     private final IdempotencyRecordRepository repository;
+    private final IdempotencyRecordPersistenceMapper mapper;
 
     public JpaIdempotencyRecordRepositoryAdapter(IdempotencyRecordRepository repository) {
         this.repository = repository;
+        this.mapper = new IdempotencyRecordPersistenceMapper();
     }
 
     @Override
     public Optional<IdempotencyRecord> findByIdempotencyKeyAndUserId(String idempotencyKey, String userId) {
-        return repository.findByIdempotencyKeyAndUserId(idempotencyKey, userId).map(this::toDomain);
+        return repository.findByIdempotencyKeyAndUserId(idempotencyKey, userId).map(mapper::toDomain);
     }
 
     @Override
     public IdempotencyRecord save(IdempotencyRecord record) {
-        return toDomain(repository.save(toEntity(record)));
+        return mapper.toDomain(repository.save(mapper.toEntity(record)));
     }
 
     @Override
@@ -33,29 +35,4 @@ public class JpaIdempotencyRecordRepositoryAdapter implements IdempotencyRecordR
         repository.deleteByExpiresAtBefore(expiresAt);
     }
 
-    private IdempotencyRecord toDomain(IdempotencyRecordEntity entity) {
-        return new IdempotencyRecord(
-            entity.getId(),
-            entity.getIdempotencyKey(),
-            entity.getUserId(),
-            entity.getRequestHash(),
-            entity.getResponseStatus(),
-            entity.getResponseBody(),
-            entity.getResourceId(),
-            entity.getCreatedAt(),
-            entity.getExpiresAt()
-        );
-    }
-
-    private IdempotencyRecordEntity toEntity(IdempotencyRecord record) {
-        IdempotencyRecordEntity entity = new IdempotencyRecordEntity();
-        entity.setIdempotencyKey(record.idempotencyKey());
-        entity.setUserId(record.userId());
-        entity.setRequestHash(record.requestHash());
-        entity.setResponseStatus(record.responseStatus());
-        entity.setResponseBody(record.responseBody());
-        entity.setResourceId(record.resourceId());
-        entity.setExpiresAt(record.expiresAt());
-        return entity;
-    }
 }

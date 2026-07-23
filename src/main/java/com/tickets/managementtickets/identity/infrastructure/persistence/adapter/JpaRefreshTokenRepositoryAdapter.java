@@ -13,19 +13,24 @@ import java.util.Optional;
 public class JpaRefreshTokenRepositoryAdapter implements RefreshTokenRepositoryPort {
 
     private final RefreshTokenRepository repository;
+    private final RefreshTokenPersistenceMapper mapper;
 
     public JpaRefreshTokenRepositoryAdapter(RefreshTokenRepository repository) {
         this.repository = repository;
+        this.mapper = new RefreshTokenPersistenceMapper();
     }
 
     @Override
     public Optional<RefreshToken> findByTokenHash(String tokenHash) {
-        return repository.findByTokenHash(tokenHash).map(this::toDomain);
+        return repository.findByTokenHash(tokenHash).map(mapper::toDomain);
     }
 
     @Override
     public RefreshToken save(RefreshToken refreshToken) {
-        return toDomain(repository.save(toEntity(refreshToken)));
+        RefreshTokenEntity entity = refreshToken.id() == null
+            ? new RefreshTokenEntity()
+            : repository.findById(refreshToken.id()).orElseGet(RefreshTokenEntity::new);
+        return mapper.toDomain(repository.save(mapper.toEntity(refreshToken, entity)));
     }
 
     @Override
@@ -33,29 +38,4 @@ public class JpaRefreshTokenRepositoryAdapter implements RefreshTokenRepositoryP
         repository.deleteByExpiresAtBefore(expiresAt);
     }
 
-    private RefreshToken toDomain(RefreshTokenEntity entity) {
-        return new RefreshToken(
-            entity.getId(),
-            entity.getUserId(),
-            entity.getTokenHash(),
-            entity.getExpiresAt(),
-            entity.getRevokedAt(),
-            entity.getReplacedByTokenId()
-        );
-    }
-
-    private RefreshTokenEntity toEntity(RefreshToken refreshToken) {
-        RefreshTokenEntity entity = refreshToken.id() == null
-            ? new RefreshTokenEntity()
-            : repository.findById(refreshToken.id()).orElseGet(RefreshTokenEntity::new);
-        if (refreshToken.id() != null) {
-            entity.setId(refreshToken.id());
-        }
-        entity.setUserId(refreshToken.userId());
-        entity.setTokenHash(refreshToken.tokenHash());
-        entity.setExpiresAt(refreshToken.expiresAt());
-        entity.setRevokedAt(refreshToken.revokedAt());
-        entity.setReplacedByTokenId(refreshToken.replacedByTokenId());
-        return entity;
-    }
 }
