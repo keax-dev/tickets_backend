@@ -17,15 +17,14 @@ import java.util.Set;
 final class TicketAccessPolicy {
 
     private static final int REQUESTER_REOPEN_WINDOW_DAYS = 7;
+    private final TicketVisibilityPolicy visibilityPolicy;
+
+    TicketAccessPolicy() {
+        this.visibilityPolicy = new TicketVisibilityPolicy();
+    }
 
     TicketVisibility resolveVisibility(AuthenticatedUser currentUser) {
-        if (currentUser.hasPermission(Permission.TICKET_READ_ALL)) {
-            return TicketVisibility.ALL;
-        }
-        if (currentUser.hasPermission(Permission.TICKET_READ_ASSIGNED)) {
-            return TicketVisibility.ASSIGNED_OR_UNASSIGNED;
-        }
-        return TicketVisibility.REQUESTER;
+        return visibilityPolicy.resolveFor(currentUser);
     }
 
     void ensureCanViewTicket(AuthenticatedUser currentUser, Ticket ticket) {

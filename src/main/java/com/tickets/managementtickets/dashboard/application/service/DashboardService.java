@@ -12,6 +12,7 @@ import com.tickets.managementtickets.ticket.application.port.TicketCountQuery;
 import com.tickets.managementtickets.ticket.application.port.TicketHistoryRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketVisibility;
+import com.tickets.managementtickets.ticket.application.service.TicketVisibilityPolicy;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistory;
 import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
@@ -37,6 +38,7 @@ public class DashboardService {
     private final Clock clock;
     private final TransactionRunner transactionRunner;
     private final DashboardResponseMapper responseMapper;
+    private final TicketVisibilityPolicy ticketVisibilityPolicy;
 
     public DashboardService(
         TicketRepositoryPort ticketRepository,
@@ -53,6 +55,7 @@ public class DashboardService {
         this.clock = clock;
         this.transactionRunner = transactionRunner;
         this.responseMapper = new DashboardResponseMapper();
+        this.ticketVisibilityPolicy = new TicketVisibilityPolicy();
     }
 
     public DashboardSummaryResponse summary(AuthenticatedUser currentUser) {
@@ -64,7 +67,8 @@ public class DashboardService {
             );
             Instant now = clock.instant();
             Instant startOfDay = now.truncatedTo(ChronoUnit.DAYS);
-            TicketCountQuery baseQuery = TicketCountQuery.visibleTo(resolveVisibility(currentUser), currentUser.id());
+            TicketVisibility visibility = ticketVisibilityPolicy.resolveFor(currentUser);
+            TicketCountQuery baseQuery = TicketCountQuery.visibleTo(visibility, currentUser.id());
             Map<TicketStatus, Long> byStatus = new EnumMap<>(TicketStatus.class);
             Map<TicketPriority, Long> byPriority = new EnumMap<>(TicketPriority.class);
             for (TicketStatus status : TicketStatus.values()) {
@@ -101,7 +105,8 @@ public class DashboardService {
                 Permission.DASHBOARD_READ_GLOBAL,
                 Permission.DASHBOARD_READ_PERSONAL
             );
-            List<TicketHistory> historyEntries = ticketHistoryRepository.findRecent(resolveVisibility(currentUser), currentUser.id(), RECENT_ACTIVITY_LIMIT);
+            TicketVisibility visibility = ticketVisibilityPolicy.resolveFor(currentUser);
+            List<TicketHistory> historyEntries = ticketHistoryRepository.findRecent(visibility, currentUser.id(), RECENT_ACTIVITY_LIMIT);
             Map<String, User> usersById = userRepository.findAllById(
                 historyEntries.stream().map(TicketHistory::performedBy).filter(Objects::nonNull).collect(Collectors.toSet())
             ).stream().collect(Collectors.toMap(User::id, user -> user));
@@ -110,16 +115,6 @@ public class DashboardService {
                 .map(entry -> responseMapper.toRecentActivityResponse(entry, usersById))
                 .toList();
         });
-    }
-
-    private TicketVisibility resolveVisibility(AuthenticatedUser currentUser) {
-        if (currentUser.hasPermission(Permission.TICKET_READ_ALL)) {
-            return TicketVisibility.ALL;
-        }
-        if (currentUser.hasPermission(Permission.TICKET_READ_ASSIGNED)) {
-            return TicketVisibility.ASSIGNED_OR_UNASSIGNED;
-        }
-        return TicketVisibility.REQUESTER;
     }
 
 }
