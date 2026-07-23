@@ -1,7 +1,7 @@
 package com.tickets.managementtickets.sla.infrastructure.web.dto;
 
 import com.tickets.managementtickets.sla.application.service.SlaPolicyService;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 
 public record SlaPolicyResponse(
     String id,

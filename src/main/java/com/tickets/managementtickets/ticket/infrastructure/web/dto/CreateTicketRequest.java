@@ -1,13 +1,14 @@
 package com.tickets.managementtickets.ticket.infrastructure.web.dto;
 
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public record CreateTicketRequest(
-    @NotBlank String title,
-    @NotBlank String description,
-    @NotBlank String categoryId,
+    @NotBlank @Size(max = 150) String title,
+    @NotBlank @Size(max = 5000) String description,
+    @NotBlank @Size(max = 36) String categoryId,
     @NotNull TicketPriority priority
 ) {
 }

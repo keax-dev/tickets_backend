@@ -12,7 +12,7 @@ import com.tickets.managementtickets.ticket.application.port.TicketRepositoryPor
 import com.tickets.managementtickets.ticket.application.port.TicketVisibility;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistory;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistoryAction;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
 import java.time.Clock;

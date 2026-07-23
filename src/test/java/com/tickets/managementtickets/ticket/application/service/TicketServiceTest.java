@@ -23,8 +23,10 @@ import com.tickets.managementtickets.ticket.application.port.TicketHistoryReposi
 import com.tickets.managementtickets.ticket.application.port.TicketLifecyclePolicy;
 import com.tickets.managementtickets.ticket.application.port.TicketRepositoryPort;
 import com.tickets.managementtickets.ticket.domain.model.Ticket;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.ticket.domain.model.TicketHistory;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,7 +44,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyIterable;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
@@ -220,7 +225,7 @@ class TicketServiceTest {
                     "Computadora sin memoria",
                     "No me permite crear archivos",
                     "category-1",
-                    com.tickets.managementtickets.ticket.domain.model.TicketPriority.HIGH
+                    TicketPriority.HIGH
                 ),
                 "idem-1"
             )
@@ -266,5 +271,43 @@ class TicketServiceTest {
 
         assertEquals("ticket-1", response.id());
         assertNull(response.assignedAgentId());
+    }
+
+    @Test
+    void shouldRecordSystemActorWhenAutoClosingResolvedTickets() {
+        Ticket ticket = new Ticket(
+            "ticket-1",
+            "TCK-2026-000001",
+            "Computadora sin memoria",
+            "No me permite crear archivos",
+            TicketStatus.RESOLVED,
+            TicketPriority.HIGH,
+            "user-1",
+            "agent-1",
+            "category-1",
+            Instant.parse("2026-07-10T04:00:00Z"),
+            Instant.parse("2026-07-11T00:00:00Z"),
+            Instant.parse("2026-07-10T01:00:00Z"),
+            Instant.parse("2026-07-08T00:00:00Z"),
+            null,
+            null,
+            null,
+            0,
+            false,
+            false,
+            "Resolved",
+            Instant.parse("2026-07-01T00:00:00Z"),
+            Instant.parse("2026-07-08T00:00:00Z"),
+            0
+        );
+
+        when(ticketRepository.findAllByStatusAndResolvedAtBefore(eq(TicketStatus.RESOLVED), any(Instant.class))).thenReturn(List.of(ticket));
+        when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ticketService.autoCloseResolvedTickets();
+
+        ArgumentCaptor<TicketHistory> historyCaptor = ArgumentCaptor.forClass(TicketHistory.class);
+        verify(ticketHistoryRepository).save(historyCaptor.capture());
+        assertEquals("00000000-0000-0000-0000-000000000000", historyCaptor.getValue().performedBy());
     }
 }

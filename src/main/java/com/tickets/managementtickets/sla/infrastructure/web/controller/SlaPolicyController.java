@@ -1,10 +1,10 @@
 package com.tickets.managementtickets.sla.infrastructure.web.controller;
 
-import com.tickets.managementtickets.identity.infrastructure.security.CurrentUserService;
+import com.tickets.managementtickets.identity.application.port.CurrentAuthenticatedUserProvider;
 import com.tickets.managementtickets.sla.application.service.SlaPolicyService;
 import com.tickets.managementtickets.sla.infrastructure.web.dto.SlaPolicyResponse;
 import com.tickets.managementtickets.sla.infrastructure.web.dto.UpdateSlaPolicyRequest;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,16 +20,16 @@ import java.util.List;
 public class SlaPolicyController {
 
     private final SlaPolicyService slaPolicyService;
-    private final CurrentUserService currentUserService;
+    private final CurrentAuthenticatedUserProvider currentUserProvider;
 
-    public SlaPolicyController(SlaPolicyService slaPolicyService, CurrentUserService currentUserService) {
+    public SlaPolicyController(SlaPolicyService slaPolicyService, CurrentAuthenticatedUserProvider currentUserProvider) {
         this.slaPolicyService = slaPolicyService;
-        this.currentUserService = currentUserService;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @GetMapping
     public List<SlaPolicyResponse> list() {
-        return slaPolicyService.list(currentUserService.requireCurrentUser()).stream()
+        return slaPolicyService.list(currentUserProvider.requireCurrentUser()).stream()
             .map(SlaPolicyResponse::from)
             .toList();
     }
@@ -41,7 +41,7 @@ public class SlaPolicyController {
     ) {
         return SlaPolicyResponse.from(
             slaPolicyService.update(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 priority,
                 new SlaPolicyService.UpdateSlaPolicyRequest(
                     request.version(),

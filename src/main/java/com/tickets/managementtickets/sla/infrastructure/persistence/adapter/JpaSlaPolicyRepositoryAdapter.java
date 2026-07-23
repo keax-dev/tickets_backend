@@ -4,7 +4,7 @@ import com.tickets.managementtickets.sla.application.port.SlaPolicyRepositoryPor
 import com.tickets.managementtickets.sla.domain.model.SlaPolicy;
 import com.tickets.managementtickets.sla.infrastructure.persistence.entity.SlaPolicyEntity;
 import com.tickets.managementtickets.sla.infrastructure.persistence.repository.SlaPolicyRepository;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;

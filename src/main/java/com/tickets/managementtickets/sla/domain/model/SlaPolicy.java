@@ -1,6 +1,6 @@
 package com.tickets.managementtickets.sla.domain.model;
 
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 
 public record SlaPolicy(
     String id,

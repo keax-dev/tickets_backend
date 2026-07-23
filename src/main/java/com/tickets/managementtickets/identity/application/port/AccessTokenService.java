@@ -9,4 +9,6 @@ public interface AccessTokenService {
     String generateAccessToken(AuthenticatedUser user);
 
     Instant resolveAccessTokenExpiration();
+
+    AuthenticatedUser parseAccessToken(String token);
 }

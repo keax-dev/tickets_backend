@@ -1,6 +1,8 @@
 package com.tickets.managementtickets.ticket.domain.model;
 
 import com.tickets.managementtickets.sla.domain.model.SlaPolicy;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.exception.DomainRuleViolationException;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -119,6 +121,7 @@ public class Ticket {
     }
 
     public void updateDetails(String title, String description, String categoryId) {
+        requireNotTerminal("Terminal tickets cannot be modified.");
         if (title != null && !title.isBlank()) {
             this.title = title;
         }
@@ -131,6 +134,7 @@ public class Ticket {
     }
 
     public void changePriority(TicketPriority priority, SlaPolicy slaPolicy, Instant fallbackStart) {
+        requireNotTerminal("Terminal tickets cannot change priority.");
         if (priority == null || priority == this.priority) {
             return;
         }
@@ -139,6 +143,7 @@ public class Ticket {
     }
 
     public void assign(String agentId) {
+        requireNotTerminal("Terminal tickets cannot be assigned.");
         this.assignedAgentId = agentId;
         if (status == TicketStatus.CREATED) {
             status = TicketStatus.ASSIGNED;
@@ -146,16 +151,19 @@ public class Ticket {
     }
 
     public void start(Instant now) {
+        requireStatus(TicketStatus.ASSIGNED, "Only assigned tickets can be started.");
         status = TicketStatus.IN_PROGRESS;
         applyFirstResponseIfMissing(now);
     }
 
     public void requestInformation(Instant now) {
+        requireStatus(TicketStatus.IN_PROGRESS, "Information can only be requested for tickets in progress.");
         status = TicketStatus.WAITING_FOR_CUSTOMER;
         pauseResolutionSla(now);
     }
 
     public void resolve(String resolutionSummary, Instant now) {
+        requireAnyStatus("Only tickets in progress or waiting for customer can be resolved.", TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_CUSTOMER);
         resumeResolutionSla(now);
         applyFirstResponseIfMissing(now);
         status = TicketStatus.RESOLVED;
@@ -167,11 +175,13 @@ public class Ticket {
     }
 
     public void close(Instant now) {
+        requireStatus(TicketStatus.RESOLVED, "Only resolved tickets can be closed.");
         status = TicketStatus.CLOSED;
         closedAt = now;
     }
 
     public void reopen(Instant now, SlaPolicy slaPolicy) {
+        requireStatus(TicketStatus.RESOLVED, "Only resolved tickets can be reopened.");
         status = TicketStatus.IN_PROGRESS;
         resolvedAt = null;
         closedAt = null;
@@ -183,11 +193,13 @@ public class Ticket {
     }
 
     public void cancel(Instant now) {
+        requireNotTerminal("Terminal tickets cannot be cancelled.");
         status = TicketStatus.CANCELLED;
         cancelledAt = now;
     }
 
     public void continueAfterCustomerResponse(Instant now) {
+        requireStatus(TicketStatus.WAITING_FOR_CUSTOMER, "Only tickets waiting for customer can continue after a customer response.");
         resumeResolutionSla(now);
         status = TicketStatus.IN_PROGRESS;
     }
@@ -229,6 +241,27 @@ public class Ticket {
             resolutionDueAt = slaStart
                 .plus(slaPolicy.resolutionHours(), ChronoUnit.HOURS)
                 .plusSeconds(accumulatedPausedSeconds);
+        }
+    }
+
+    private void requireStatus(TicketStatus expected, String message) {
+        if (status != expected) {
+            throw new DomainRuleViolationException(message);
+        }
+    }
+
+    private void requireAnyStatus(String message, TicketStatus... allowedStatuses) {
+        for (TicketStatus allowedStatus : allowedStatuses) {
+            if (status == allowedStatus) {
+                return;
+            }
+        }
+        throw new DomainRuleViolationException(message);
+    }
+
+    private void requireNotTerminal(String message) {
+        if (isTerminal()) {
+            throw new DomainRuleViolationException(message);
         }
     }
 

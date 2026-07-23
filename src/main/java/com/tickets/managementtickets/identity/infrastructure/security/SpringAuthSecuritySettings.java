@@ -45,4 +45,14 @@ public class SpringAuthSecuritySettings implements AuthSecuritySettings {
     public boolean isRefreshCookieSecure() {
         return environment.acceptsProfiles(Profiles.of("prod"));
     }
+
+    @Override
+    public int getMaxFailedLoginAttempts() {
+        return properties.getMaxFailedLoginAttempts();
+    }
+
+    @Override
+    public int getAccountLockMinutes() {
+        return properties.getAccountLockMinutes();
+    }
 }

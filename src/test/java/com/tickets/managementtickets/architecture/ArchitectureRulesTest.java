@@ -6,6 +6,7 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 @AnalyzeClasses(packages = "com.tickets.managementtickets", importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureRulesTest {
@@ -53,4 +54,10 @@ class ArchitectureRulesTest {
         .should()
         .dependOnClassesThat()
         .resideInAPackage("..application..");
+
+    @ArchTest
+    static final ArchRule modules_should_not_form_dependency_cycles = slices()
+        .matching("com.tickets.managementtickets.(*)..")
+        .should()
+        .beFreeOfCycles();
 }

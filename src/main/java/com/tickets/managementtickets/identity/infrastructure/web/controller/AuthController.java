@@ -3,9 +3,11 @@ package com.tickets.managementtickets.identity.infrastructure.web.controller;
 import com.tickets.managementtickets.identity.application.service.AuthService;
 import com.tickets.managementtickets.identity.application.model.AuthCookie;
 import com.tickets.managementtickets.identity.infrastructure.security.SecurityProperties;
+import com.tickets.managementtickets.identity.infrastructure.web.ratelimit.LoginRateLimiter;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.AuthResponse;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.CurrentUserResponse;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.LoginRequest;
+import com.tickets.managementtickets.shared.application.exception.ApplicationException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -26,18 +28,30 @@ public class AuthController {
 
     private final AuthService authService;
     private final SecurityProperties securityProperties;
+    private final LoginRateLimiter loginRateLimiter;
 
-    public AuthController(AuthService authService, SecurityProperties securityProperties) {
+    public AuthController(AuthService authService, SecurityProperties securityProperties, LoginRateLimiter loginRateLimiter) {
         this.authService = authService;
         this.securityProperties = securityProperties;
+        this.loginRateLimiter = loginRateLimiter;
     }
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(
         @Valid @RequestBody LoginRequest request,
+        HttpServletRequest servletRequest,
         HttpServletResponse response
     ) {
-        AuthService.AuthResult authResult = authService.login(request.email(), request.password());
+        String rateLimitKey = loginRateLimiter.keyFor(servletRequest.getRemoteAddr(), request.email());
+        loginRateLimiter.checkAllowed(rateLimitKey);
+        AuthService.AuthResult authResult;
+        try {
+            authResult = authService.login(request.email(), request.password());
+            loginRateLimiter.reset(rateLimitKey);
+        } catch (ApplicationException exception) {
+            loginRateLimiter.recordFailure(rateLimitKey);
+            throw exception;
+        }
         response.addHeader("Set-Cookie", toResponseCookie(authResult.refreshCookie()).toString());
         return ResponseEntity.ok(AuthResponse.from(authResult.response()));
     }

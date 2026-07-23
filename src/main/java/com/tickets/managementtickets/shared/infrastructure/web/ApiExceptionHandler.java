@@ -2,6 +2,7 @@ package com.tickets.managementtickets.shared.infrastructure.web;
 
 import com.tickets.managementtickets.shared.application.exception.ApplicationException;
 import com.tickets.managementtickets.shared.application.exception.ApplicationErrorStatus;
+import com.tickets.managementtickets.shared.domain.exception.DomainRuleViolationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ApplicationException.class)
     ProblemDetail handleApplicationException(ApplicationException exception, HttpServletRequest request) {
         return buildProblemDetail(toHttpStatus(exception.getStatus()), exception.getCode(), exception.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(DomainRuleViolationException.class)
+    ProblemDetail handleDomainRuleViolation(DomainRuleViolationException exception, HttpServletRequest request) {
+        return buildProblemDetail(HttpStatus.UNPROCESSABLE_CONTENT, "DOMAIN_RULE_VIOLATION", exception.getMessage(), request, List.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -74,6 +80,7 @@ public class ApiExceptionHandler {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
             case CONFLICT -> HttpStatus.CONFLICT;
             case UNPROCESSABLE_CONTENT -> HttpStatus.UNPROCESSABLE_CONTENT;
+            case TOO_MANY_REQUESTS -> HttpStatus.TOO_MANY_REQUESTS;
         };
     }
 

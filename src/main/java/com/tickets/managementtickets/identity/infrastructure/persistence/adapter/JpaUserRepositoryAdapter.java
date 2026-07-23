@@ -61,6 +61,7 @@ public class JpaUserRepositoryAdapter implements UserRepositoryPort {
             entity.isActive(),
             entity.getFailedLoginAttempts(),
             entity.getLastLoginAt(),
+            entity.getLockedUntil(),
             entity.getVersion()
         );
     }
@@ -80,6 +81,7 @@ public class JpaUserRepositoryAdapter implements UserRepositoryPort {
         entity.setActive(user.active());
         entity.setFailedLoginAttempts(user.failedLoginAttempts());
         entity.setLastLoginAt(user.lastLoginAt());
+        entity.setLockedUntil(user.lockedUntil());
         return entity;
     }
 }

@@ -1,6 +1,6 @@
 package com.tickets.managementtickets.ticket.infrastructure.web.controller;
 
-import com.tickets.managementtickets.identity.infrastructure.security.CurrentUserService;
+import com.tickets.managementtickets.identity.application.port.CurrentAuthenticatedUserProvider;
 import com.tickets.managementtickets.shared.application.model.PageResponse;
 import com.tickets.managementtickets.shared.application.model.SortDirection;
 import com.tickets.managementtickets.ticket.application.service.TicketService;
@@ -17,12 +17,13 @@ import com.tickets.managementtickets.ticket.infrastructure.web.dto.TicketHistory
 import com.tickets.managementtickets.ticket.infrastructure.web.dto.TicketSummaryResponse;
 import com.tickets.managementtickets.ticket.infrastructure.web.dto.UpdateTicketRequest;
 import com.tickets.managementtickets.ticket.infrastructure.web.dto.VersionedRequest;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
@@ -45,11 +46,11 @@ import java.util.List;
 public class TicketController {
 
     private final TicketService ticketService;
-    private final CurrentUserService currentUserService;
+    private final CurrentAuthenticatedUserProvider currentUserProvider;
 
-    public TicketController(TicketService ticketService, CurrentUserService currentUserService) {
+    public TicketController(TicketService ticketService, CurrentAuthenticatedUserProvider currentUserProvider) {
         this.ticketService = ticketService;
-        this.currentUserService = currentUserService;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @GetMapping
@@ -68,7 +69,7 @@ public class TicketController {
     ) {
         return ticketService
             .list(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 new TicketService.TicketFilterRequest(search, status, priority, categoryId, assignedAgentId, createdFrom, createdTo, page, size, sortBy, toSortDirection(direction))
             )
             .map(TicketSummaryResponse::from);
@@ -77,11 +78,11 @@ public class TicketController {
     @PostMapping
     public TicketDetailResponse create(
         @Valid @RequestBody CreateTicketRequest request,
-        @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey
+        @RequestHeader(name = "Idempotency-Key", required = false) @Size(max = 120) String idempotencyKey
     ) {
         return TicketDetailResponse.from(
             ticketService.create(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 new TicketService.CreateTicketRequest(request.title(), request.description(), request.categoryId(), request.priority()),
                 idempotencyKey
             )
@@ -90,7 +91,7 @@ public class TicketController {
 
     @GetMapping("/{ticketId}")
     public TicketDetailResponse getById(@PathVariable String ticketId) {
-        return TicketDetailResponse.from(ticketService.getById(currentUserService.requireCurrentUser(), ticketId));
+        return TicketDetailResponse.from(ticketService.getById(currentUserProvider.requireCurrentUser(), ticketId));
     }
 
     @PatchMapping("/{ticketId}")
@@ -100,7 +101,7 @@ public class TicketController {
     ) {
         return TicketDetailResponse.from(
             ticketService.update(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 ticketId,
                 new TicketService.UpdateTicketRequest(request.version(), request.title(), request.description(), request.categoryId(), request.priority())
             )
@@ -114,7 +115,7 @@ public class TicketController {
     ) {
         return TicketDetailResponse.from(
             ticketService.assign(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 ticketId,
                 new TicketService.AssignTicketRequest(request.version(), request.agentId())
             )
@@ -128,7 +129,7 @@ public class TicketController {
     ) {
         return TicketDetailResponse.from(
             ticketService.start(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 ticketId,
                 new TicketService.VersionedRequest(request.version())
             )
@@ -142,7 +143,7 @@ public class TicketController {
     ) {
         return TicketDetailResponse.from(
             ticketService.requestInformation(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 ticketId,
                 new TicketService.RequestInformationRequest(request.version(), request.content())
             )
@@ -156,7 +157,7 @@ public class TicketController {
     ) {
         return TicketDetailResponse.from(
             ticketService.resolve(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 ticketId,
                 new TicketService.ResolveTicketRequest(request.version(), request.resolutionSummary())
             )
@@ -170,7 +171,7 @@ public class TicketController {
     ) {
         return TicketDetailResponse.from(
             ticketService.close(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 ticketId,
                 new TicketService.VersionedRequest(request.version())
             )
@@ -184,7 +185,7 @@ public class TicketController {
     ) {
         return TicketDetailResponse.from(
             ticketService.reopen(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 ticketId,
                 new TicketService.ReopenTicketRequest(request.version(), request.reason())
             )
@@ -198,7 +199,7 @@ public class TicketController {
     ) {
         return TicketDetailResponse.from(
             ticketService.cancel(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 ticketId,
                 new TicketService.CancelTicketRequest(request.version(), request.reason())
             )
@@ -207,7 +208,7 @@ public class TicketController {
 
     @GetMapping("/{ticketId}/comments")
     public List<TicketCommentResponse> comments(@PathVariable String ticketId) {
-        return ticketService.listComments(currentUserService.requireCurrentUser(), ticketId).stream()
+        return ticketService.listComments(currentUserProvider.requireCurrentUser(), ticketId).stream()
             .map(TicketCommentResponse::from)
             .toList();
     }
@@ -219,7 +220,7 @@ public class TicketController {
     ) {
         return TicketCommentResponse.from(
             ticketService.addComment(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 ticketId,
                 new TicketService.AddCommentRequest(request.version(), request.content(), request.visibility())
             )
@@ -228,7 +229,7 @@ public class TicketController {
 
     @GetMapping("/{ticketId}/history")
     public List<TicketHistoryResponse> history(@PathVariable String ticketId) {
-        return ticketService.listHistory(currentUserService.requireCurrentUser(), ticketId).stream()
+        return ticketService.listHistory(currentUserProvider.requireCurrentUser(), ticketId).stream()
             .map(TicketHistoryResponse::from)
             .toList();
     }

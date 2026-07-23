@@ -39,7 +39,7 @@ import com.tickets.managementtickets.ticket.domain.model.Ticket;
 import com.tickets.managementtickets.ticket.domain.model.TicketComment;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistory;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistoryAction;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
 import java.time.Clock;
@@ -60,7 +60,7 @@ import java.util.stream.Stream;
 public class TicketService {
 
     private static final int MAX_PAGE_SIZE = 100;
-    private static final String SYSTEM_ACTOR = "system-auto-close";
+    private static final String SYSTEM_ACTOR = "00000000-0000-0000-0000-000000000000";
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
         "createdAt",
         "updatedAt",
@@ -233,6 +233,7 @@ public class TicketService {
             }
             ticket.updateDetails(normalize(request.title()), normalize(request.description()), requestedCategoryId);
             if (request.priority() != null && request.priority() != ticket.getPriority()) {
+                authorizationService.requirePermission(currentUser, Permission.TICKET_CHANGE_PRIORITY);
                 ticket.changePriority(request.priority(), findActiveSlaPolicy(request.priority()), clock.instant());
             }
 
@@ -282,6 +283,7 @@ public class TicketService {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
             ensureCanOperateTicket(currentUser, ticket);
+            authorizationService.requirePermission(currentUser, Permission.TICKET_RESOLVE);
             ensureVersion(ticket, request.version());
             if (ticket.getStatus() != TicketStatus.ASSIGNED) {
                 throw new ValidationException("INVALID_TICKET_TRANSITION", "The ticket must be in ASSIGNED status.");
@@ -364,7 +366,8 @@ public class TicketService {
                 throw new ValidationException("REOPEN_REASON_REQUIRED", "The reopen reason is required.");
             }
 
-            boolean isRequester = ticket.getRequesterId().equals(currentUser.id());
+            boolean isRequester = currentUser.hasPermission(Permission.TICKET_REOPEN)
+                && ticket.getRequesterId().equals(currentUser.id());
             boolean isPrivileged = currentUser.hasPermission(Permission.TICKET_REOPEN) && currentUser.hasPermission(Permission.TICKET_READ_ALL);
             if (!isRequester && !isPrivileged) {
                 throw new ForbiddenException("ACCESS_DENIED", "You do not have permission to reopen this ticket.");
@@ -375,7 +378,7 @@ public class TicketService {
 
             ticket.reopen(clock.instant(), findActiveSlaPolicy(ticket.getPriority()));
             ticket = ticketRepository.save(ticket);
-            addHistory(ticket.getId(), TicketHistoryAction.REOPENED, currentUser.id(), TicketStatus.RESOLVED.name(), TicketStatus.IN_PROGRESS.name(), "{\"reason\":\"" + escapeJson(request.reason()) + "\"}");
+            addHistory(ticket.getId(), TicketHistoryAction.REOPENED, currentUser.id(), TicketStatus.RESOLVED.name(), TicketStatus.IN_PROGRESS.name(), metadata("reason", request.reason()));
             if (ticket.getAssignedAgentId() != null) {
                 notifyUser(ticket.getAssignedAgentId(), NotificationType.TICKET_REOPENED, "Ticket reabierto", "El ticket " + ticket.getCode() + " fue reabierto.", ticket.getId());
             }
@@ -391,7 +394,9 @@ public class TicketService {
                 throw new ValidationException("CANCEL_REASON_REQUIRED", "The cancel reason is required.");
             }
 
-            boolean requesterCanCancel = ticket.getRequesterId().equals(currentUser.id()) && ticket.getStatus() == TicketStatus.CREATED;
+            boolean requesterCanCancel = currentUser.hasPermission(Permission.TICKET_CANCEL)
+                && ticket.getRequesterId().equals(currentUser.id())
+                && ticket.getStatus() == TicketStatus.CREATED;
             boolean privilegedCanCancel = currentUser.hasPermission(Permission.TICKET_CANCEL)
                 && currentUser.hasPermission(Permission.TICKET_READ_ALL)
                 && Set.of(TicketStatus.CREATED, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_CUSTOMER).contains(ticket.getStatus());
@@ -402,7 +407,7 @@ public class TicketService {
 
             ticket.cancel(clock.instant());
             ticket = ticketRepository.save(ticket);
-            addHistory(ticket.getId(), TicketHistoryAction.CANCELLED, currentUser.id(), null, null, "{\"reason\":\"" + escapeJson(request.reason()) + "\"}");
+            addHistory(ticket.getId(), TicketHistoryAction.CANCELLED, currentUser.id(), null, null, metadata("reason", request.reason()));
             return toDetailResponse(ticket, currentUser);
         });
     }
@@ -577,10 +582,15 @@ public class TicketService {
         if (ticket.isTerminal()) {
             throw new ValidationException("TICKET_TERMINAL", "Terminal tickets cannot be modified.");
         }
-        if (currentUser.hasPermission(Permission.TICKET_READ_ALL)) {
+        boolean privilegedCanUpdate = currentUser.hasPermission(Permission.TICKET_UPDATE)
+            && currentUser.hasPermission(Permission.TICKET_READ_ALL);
+        if (privilegedCanUpdate) {
             return;
         }
-        if (currentUser.id().equals(ticket.getRequesterId()) && ticket.getStatus() == TicketStatus.CREATED) {
+        boolean requesterCanUpdate = currentUser.hasPermission(Permission.TICKET_UPDATE)
+            && currentUser.id().equals(ticket.getRequesterId())
+            && ticket.getStatus() == TicketStatus.CREATED;
+        if (requesterCanUpdate) {
             return;
         }
         throw new ForbiddenException("ACCESS_DENIED", "You do not have permission to update this ticket.");
@@ -808,8 +818,8 @@ public class TicketService {
         return value == null ? "" : value.trim();
     }
 
-    private String escapeJson(String value) {
-        return normalize(value).replace("\"", "\\\"");
+    private String metadata(String key, String value) {
+        return jsonCodec.serialize(Map.of(key, normalize(value)));
     }
 
     public record TicketFilterRequest(

@@ -29,11 +29,14 @@ public class CategoryService {
     }
 
     public List<CategoryResponse> list(AuthenticatedUser currentUser) {
-        return transactionRunner.readOnly(() -> categoryRepository.findAll()
-            .stream()
-            .filter(category -> currentUser.hasPermission(Permission.CATEGORY_UPDATE) || currentUser.hasPermission(Permission.CATEGORY_DISABLE) || category.active())
-            .map(this::toResponse)
-            .toList());
+        return transactionRunner.readOnly(() -> {
+            authorizationService.requirePermission(currentUser, Permission.CATEGORY_READ);
+            return categoryRepository.findAll()
+                .stream()
+                .filter(category -> currentUser.hasPermission(Permission.CATEGORY_UPDATE) || currentUser.hasPermission(Permission.CATEGORY_DISABLE) || category.active())
+                .map(this::toResponse)
+                .toList();
+        });
     }
 
     public CategoryResponse create(AuthenticatedUser currentUser, UpsertCategoryRequest request) {

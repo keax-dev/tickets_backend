@@ -13,4 +13,8 @@ public interface AuthSecuritySettings {
     String getRefreshCookieName();
 
     boolean isRefreshCookieSecure();
+
+    int getMaxFailedLoginAttempts();
+
+    int getAccountLockMinutes();
 }

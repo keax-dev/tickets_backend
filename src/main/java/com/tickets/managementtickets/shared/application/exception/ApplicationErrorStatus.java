@@ -6,5 +6,6 @@ public enum ApplicationErrorStatus {
     FORBIDDEN,
     NOT_FOUND,
     CONFLICT,
-    UNPROCESSABLE_CONTENT
+    UNPROCESSABLE_CONTENT,
+    TOO_MANY_REQUESTS
 }

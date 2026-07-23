@@ -39,6 +39,9 @@ public class UserEntity extends BaseUuidEntity {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
     public String getFirstName() {
         return firstName;
     }
@@ -101,5 +104,13 @@ public class UserEntity extends BaseUuidEntity {
 
     public void setLastLoginAt(Instant lastLoginAt) {
         this.lastLoginAt = lastLoginAt;
+    }
+
+    public Instant getLockedUntil() {
+        return lockedUntil;
+    }
+
+    public void setLockedUntil(Instant lockedUntil) {
+        this.lockedUntil = lockedUntil;
     }
 }

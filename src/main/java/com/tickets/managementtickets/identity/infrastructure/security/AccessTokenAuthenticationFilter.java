@@ -1,6 +1,7 @@
 package com.tickets.managementtickets.identity.infrastructure.security;
 
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
+import com.tickets.managementtickets.identity.application.port.AccessTokenService;
 import com.tickets.managementtickets.shared.application.exception.UnauthorizedException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -19,10 +20,10 @@ import java.util.ArrayList;
 @Component
 public class AccessTokenAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtTokenService jwtTokenService;
+    private final AccessTokenService accessTokenService;
 
-    public AccessTokenAuthenticationFilter(JwtTokenService jwtTokenService) {
-        this.jwtTokenService = jwtTokenService;
+    public AccessTokenAuthenticationFilter(AccessTokenService accessTokenService) {
+        this.accessTokenService = accessTokenService;
     }
 
     @Override
@@ -35,7 +36,7 @@ public class AccessTokenAuthenticationFilter extends OncePerRequestFilter {
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             String token = authorizationHeader.substring(7);
             try {
-                AuthenticatedUser user = jwtTokenService.parseAccessToken(token);
+                AuthenticatedUser user = accessTokenService.parseAccessToken(token);
                 var authorities = new ArrayList<SimpleGrantedAuthority>();
                 authorities.add(new SimpleGrantedAuthority("ROLE_" + user.role().name()));
                 user.permissions().forEach(permission -> authorities.add(new SimpleGrantedAuthority(permission.name())));

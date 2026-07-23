@@ -72,12 +72,22 @@ public class AuthService {
                 throw new UnauthorizedException("USER_INACTIVE", "The user is inactive.");
             }
 
-            if (!passwordHashingService.matches(password, user.passwordHash())) {
-                userRepository.save(user.recordFailedLogin());
+            Instant now = clock.instant();
+            User loginCandidate = user.clearExpiredLoginLock(now);
+            if (loginCandidate.isLoginLocked(now)) {
+                throw new UnauthorizedException("ACCOUNT_LOCKED", "The account is temporarily locked. Please try again later.");
+            }
+
+            if (!passwordHashingService.matches(password, loginCandidate.passwordHash())) {
+                userRepository.save(loginCandidate.recordFailedLogin(
+                    now,
+                    securityProperties.getMaxFailedLoginAttempts(),
+                    securityProperties.getAccountLockMinutes()
+                ));
                 throw new UnauthorizedException("INVALID_CREDENTIALS", "Invalid credentials.");
             }
 
-            User loggedInUser = userRepository.save(user.recordSuccessfulLogin(clock.instant()));
+            User loggedInUser = userRepository.save(loginCandidate.recordSuccessfulLogin(now));
             return issueTokens(buildAuthenticatedUser(loggedInUser), null);
         });
     }
@@ -162,7 +172,7 @@ public class AuthService {
             value,
             true,
             securityProperties.isRefreshCookieSecure(),
-            "Lax",
+            "Strict",
             "/api/v1/auth",
             maxAgeSeconds
         );

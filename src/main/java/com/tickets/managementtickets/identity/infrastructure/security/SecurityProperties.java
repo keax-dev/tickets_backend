@@ -30,6 +30,18 @@ public class SecurityProperties {
     @NotBlank
     private String refreshCookieName;
 
+    @Positive
+    private int maxFailedLoginAttempts;
+
+    @Positive
+    private int accountLockMinutes;
+
+    @Positive
+    private int loginRateLimitMaxAttempts;
+
+    @Positive
+    private int loginRateLimitWindowMinutes;
+
     @NotEmpty
     private List<@NotBlank String> allowedOrigins = new ArrayList<>();
 
@@ -71,6 +83,38 @@ public class SecurityProperties {
 
     public void setRefreshCookieName(String refreshCookieName) {
         this.refreshCookieName = refreshCookieName;
+    }
+
+    public int getMaxFailedLoginAttempts() {
+        return maxFailedLoginAttempts;
+    }
+
+    public void setMaxFailedLoginAttempts(int maxFailedLoginAttempts) {
+        this.maxFailedLoginAttempts = maxFailedLoginAttempts;
+    }
+
+    public int getAccountLockMinutes() {
+        return accountLockMinutes;
+    }
+
+    public void setAccountLockMinutes(int accountLockMinutes) {
+        this.accountLockMinutes = accountLockMinutes;
+    }
+
+    public int getLoginRateLimitMaxAttempts() {
+        return loginRateLimitMaxAttempts;
+    }
+
+    public void setLoginRateLimitMaxAttempts(int loginRateLimitMaxAttempts) {
+        this.loginRateLimitMaxAttempts = loginRateLimitMaxAttempts;
+    }
+
+    public int getLoginRateLimitWindowMinutes() {
+        return loginRateLimitWindowMinutes;
+    }
+
+    public void setLoginRateLimitWindowMinutes(int loginRateLimitWindowMinutes) {
+        this.loginRateLimitWindowMinutes = loginRateLimitWindowMinutes;
     }
 
     public List<String> getAllowedOrigins() {

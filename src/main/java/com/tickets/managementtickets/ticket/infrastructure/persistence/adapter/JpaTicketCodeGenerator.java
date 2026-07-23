@@ -20,13 +20,9 @@ public class JpaTicketCodeGenerator implements TicketCodeGenerator {
     @Override
     public String nextCode(Instant now) {
         int currentYear = now.atZone(ZoneOffset.UTC).getYear();
+        repository.ensureSequenceExists(currentYear);
         TicketSequenceEntity sequence = repository.findByYearForUpdate(currentYear)
-            .orElseGet(() -> {
-                TicketSequenceEntity createdSequence = new TicketSequenceEntity();
-                createdSequence.setSequenceYear(currentYear);
-                createdSequence.setCurrentValue(0L);
-                return repository.save(createdSequence);
-            });
+            .orElseThrow(() -> new IllegalStateException("Ticket sequence could not be initialized."));
 
         sequence.setCurrentValue(sequence.getCurrentValue() + 1);
         repository.save(sequence);

@@ -9,7 +9,7 @@ import com.tickets.managementtickets.shared.application.exception.ValidationExce
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 import com.tickets.managementtickets.sla.application.port.SlaPolicyRepositoryPort;
 import com.tickets.managementtickets.sla.domain.model.SlaPolicy;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 
 import java.util.List;
 

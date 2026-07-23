@@ -1,6 +1,6 @@
 package com.tickets.managementtickets.notification.infrastructure.web.controller;
 
-import com.tickets.managementtickets.identity.infrastructure.security.CurrentUserService;
+import com.tickets.managementtickets.identity.application.port.CurrentAuthenticatedUserProvider;
 import com.tickets.managementtickets.notification.application.service.NotificationService;
 import com.tickets.managementtickets.notification.infrastructure.web.dto.NotificationResponse;
 import com.tickets.managementtickets.shared.application.model.PageResponse;
@@ -22,11 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController {
 
     private final NotificationService notificationService;
-    private final CurrentUserService currentUserService;
+    private final CurrentAuthenticatedUserProvider currentUserProvider;
 
-    public NotificationController(NotificationService notificationService, CurrentUserService currentUserService) {
+    public NotificationController(NotificationService notificationService, CurrentAuthenticatedUserProvider currentUserProvider) {
         this.notificationService = notificationService;
-        this.currentUserService = currentUserService;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @GetMapping
@@ -35,20 +35,20 @@ public class NotificationController {
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
         return notificationService
-            .list(currentUserService.requireCurrentUser(), page, size)
+            .list(currentUserProvider.requireCurrentUser(), page, size)
             .map(NotificationResponse::from);
     }
 
     @PatchMapping("/{notificationId}/read")
     public NotificationResponse markAsRead(@PathVariable String notificationId) {
         return NotificationResponse.from(
-            notificationService.markAsRead(currentUserService.requireCurrentUser(), notificationId)
+            notificationService.markAsRead(currentUserProvider.requireCurrentUser(), notificationId)
         );
     }
 
     @PatchMapping("/read-all")
     public ResponseEntity<Void> markAllAsRead() {
-        notificationService.markAllAsRead(currentUserService.requireCurrentUser());
+        notificationService.markAllAsRead(currentUserProvider.requireCurrentUser());
         return ResponseEntity.noContent().build();
     }
 }

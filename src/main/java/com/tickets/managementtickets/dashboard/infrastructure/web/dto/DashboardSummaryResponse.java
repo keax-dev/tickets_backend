@@ -1,7 +1,7 @@
 package com.tickets.managementtickets.dashboard.infrastructure.web.dto;
 
 import com.tickets.managementtickets.dashboard.application.service.DashboardService;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
 import java.util.Map;

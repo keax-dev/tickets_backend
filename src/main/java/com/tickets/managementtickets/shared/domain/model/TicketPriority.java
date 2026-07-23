@@ -1,4 +1,4 @@
-package com.tickets.managementtickets.ticket.domain.model;
+package com.tickets.managementtickets.shared.domain.model;
 
 public enum TicketPriority {
     LOW,

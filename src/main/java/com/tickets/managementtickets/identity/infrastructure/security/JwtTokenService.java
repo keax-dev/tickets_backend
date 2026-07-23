@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 @Service
 public class JwtTokenService implements AccessTokenService {
@@ -41,6 +42,7 @@ public class JwtTokenService implements AccessTokenService {
         return Jwts.builder()
             .issuer(securityProperties.getIssuer())
             .subject(user.id())
+            .id(UUID.randomUUID().toString())
             .issuedAt(java.util.Date.from(issuedAt))
             .expiration(java.util.Date.from(expiration))
             .claim("email", user.email())
@@ -59,6 +61,7 @@ public class JwtTokenService implements AccessTokenService {
         try {
             Claims claims = Jwts.parser()
                 .verifyWith(secretKey())
+                .requireIssuer(securityProperties.getIssuer())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();

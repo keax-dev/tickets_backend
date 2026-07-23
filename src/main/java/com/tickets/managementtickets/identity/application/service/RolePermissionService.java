@@ -20,6 +20,7 @@ public class RolePermissionService {
             Permission.CATEGORY_READ,
             Permission.SLA_READ,
             Permission.TICKET_READ_ALL,
+            Permission.TICKET_UPDATE,
             Permission.TICKET_ASSIGN,
             Permission.TICKET_REASSIGN,
             Permission.TICKET_CHANGE_PRIORITY,

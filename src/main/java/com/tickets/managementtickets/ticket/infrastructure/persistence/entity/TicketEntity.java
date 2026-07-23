@@ -1,7 +1,7 @@
 package com.tickets.managementtickets.ticket.infrastructure.persistence.entity;
 
 import com.tickets.managementtickets.shared.infrastructure.persistence.BaseUuidEntity;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

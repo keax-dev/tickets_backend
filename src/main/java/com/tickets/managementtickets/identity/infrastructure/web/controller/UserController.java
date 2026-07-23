@@ -1,7 +1,7 @@
 package com.tickets.managementtickets.identity.infrastructure.web.controller;
 
+import com.tickets.managementtickets.identity.application.port.CurrentAuthenticatedUserProvider;
 import com.tickets.managementtickets.identity.application.service.UserManagementService;
-import com.tickets.managementtickets.identity.infrastructure.security.CurrentUserService;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.CreateUserRequest;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.StatusRequest;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.UpdateUserRequest;
@@ -23,30 +23,30 @@ import java.util.List;
 public class UserController {
 
     private final UserManagementService userManagementService;
-    private final CurrentUserService currentUserService;
+    private final CurrentAuthenticatedUserProvider currentUserProvider;
 
-    public UserController(UserManagementService userManagementService, CurrentUserService currentUserService) {
+    public UserController(UserManagementService userManagementService, CurrentAuthenticatedUserProvider currentUserProvider) {
         this.userManagementService = userManagementService;
-        this.currentUserService = currentUserService;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @GetMapping
     public List<UserResponse> list() {
-        return userManagementService.list(currentUserService.requireCurrentUser()).stream()
+        return userManagementService.list(currentUserProvider.requireCurrentUser()).stream()
             .map(UserResponse::from)
             .toList();
     }
 
     @GetMapping("/{userId}")
     public UserResponse getById(@PathVariable String userId) {
-        return UserResponse.from(userManagementService.getById(currentUserService.requireCurrentUser(), userId));
+        return UserResponse.from(userManagementService.getById(currentUserProvider.requireCurrentUser(), userId));
     }
 
     @PostMapping
     public UserResponse create(@Valid @RequestBody CreateUserRequest request) {
         return UserResponse.from(
             userManagementService.create(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 new UserManagementService.CreateUserRequest(
                     request.firstName(),
                     request.lastName(),
@@ -65,7 +65,7 @@ public class UserController {
     ) {
         return UserResponse.from(
             userManagementService.update(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 userId,
                 new UserManagementService.UpdateUserRequest(
                     request.version(),
@@ -85,7 +85,7 @@ public class UserController {
     ) {
         return UserResponse.from(
             userManagementService.updateStatus(
-                currentUserService.requireCurrentUser(),
+                currentUserProvider.requireCurrentUser(),
                 userId,
                 new UserManagementService.StatusUpdateRequest(request.version(), request.active())
             )

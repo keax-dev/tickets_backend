@@ -1,7 +1,7 @@
 package com.tickets.managementtickets.ticket.infrastructure.web.dto;
 
 import com.tickets.managementtickets.ticket.application.service.TicketService;
-import com.tickets.managementtickets.ticket.domain.model.TicketPriority;
+import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
 import java.time.Instant;
