@@ -9,10 +9,6 @@ import com.tickets.managementtickets.identity.domain.model.Permission;
 import com.tickets.managementtickets.identity.domain.model.Role;
 import com.tickets.managementtickets.identity.domain.model.User;
 import com.tickets.managementtickets.notification.application.port.NotificationRepositoryPort;
-import com.tickets.managementtickets.notification.domain.model.Notification;
-import com.tickets.managementtickets.notification.domain.model.NotificationType;
-import com.tickets.managementtickets.shared.application.exception.BadRequestException;
-import com.tickets.managementtickets.shared.application.exception.ConflictException;
 import com.tickets.managementtickets.shared.application.exception.ForbiddenException;
 import com.tickets.managementtickets.shared.application.exception.NotFoundException;
 import com.tickets.managementtickets.shared.application.exception.UnauthorizedException;
@@ -24,6 +20,15 @@ import com.tickets.managementtickets.shared.application.port.JsonCodec;
 import com.tickets.managementtickets.shared.application.port.TransactionRunner;
 import com.tickets.managementtickets.sla.application.port.SlaPolicyRepositoryPort;
 import com.tickets.managementtickets.sla.domain.model.SlaPolicy;
+import com.tickets.managementtickets.ticket.application.command.AddCommentRequest;
+import com.tickets.managementtickets.ticket.application.command.AssignTicketRequest;
+import com.tickets.managementtickets.ticket.application.command.CancelTicketRequest;
+import com.tickets.managementtickets.ticket.application.command.CreateTicketRequest;
+import com.tickets.managementtickets.ticket.application.command.ReopenTicketRequest;
+import com.tickets.managementtickets.ticket.application.command.RequestInformationRequest;
+import com.tickets.managementtickets.ticket.application.command.ResolveTicketRequest;
+import com.tickets.managementtickets.ticket.application.command.UpdateTicketRequest;
+import com.tickets.managementtickets.ticket.application.command.VersionedRequest;
 import com.tickets.managementtickets.ticket.application.port.IdempotencyPolicy;
 import com.tickets.managementtickets.ticket.application.port.IdempotencyRecordRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketCodeGenerator;
@@ -32,20 +37,21 @@ import com.tickets.managementtickets.ticket.application.port.TicketHistoryReposi
 import com.tickets.managementtickets.ticket.application.port.TicketLifecyclePolicy;
 import com.tickets.managementtickets.ticket.application.port.TicketQuery;
 import com.tickets.managementtickets.ticket.application.port.TicketRepositoryPort;
-import com.tickets.managementtickets.ticket.application.port.TicketVisibility;
+import com.tickets.managementtickets.ticket.application.query.TicketFilterRequest;
+import com.tickets.managementtickets.ticket.application.result.TicketCommentResponse;
+import com.tickets.managementtickets.ticket.application.result.TicketDetailResponse;
+import com.tickets.managementtickets.ticket.application.result.TicketHistoryResponse;
+import com.tickets.managementtickets.ticket.application.result.TicketSummaryResponse;
 import com.tickets.managementtickets.ticket.domain.model.CommentVisibility;
-import com.tickets.managementtickets.ticket.domain.model.IdempotencyRecord;
 import com.tickets.managementtickets.ticket.domain.model.Ticket;
 import com.tickets.managementtickets.ticket.domain.model.TicketComment;
 import com.tickets.managementtickets.ticket.domain.model.TicketHistory;
-import com.tickets.managementtickets.ticket.domain.model.TicketHistoryAction;
 import com.tickets.managementtickets.shared.domain.model.TicketPriority;
 import com.tickets.managementtickets.ticket.domain.model.TicketStatus;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -59,34 +65,24 @@ import java.util.stream.Stream;
 
 public class TicketService {
 
-    private static final int MAX_PAGE_SIZE = 100;
     private static final String SYSTEM_ACTOR = "00000000-0000-0000-0000-000000000000";
-    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
-        "createdAt",
-        "updatedAt",
-        "code",
-        "title",
-        "status",
-        "priority",
-        "resolutionDueAt"
-    );
 
     private final TicketRepositoryPort ticketRepository;
     private final TicketCommentRepositoryPort ticketCommentRepository;
     private final TicketHistoryRepositoryPort ticketHistoryRepository;
-    private final IdempotencyRecordRepositoryPort idempotencyRecordRepository;
     private final UserRepositoryPort userRepository;
     private final CategoryRepositoryPort categoryRepository;
     private final SlaPolicyRepositoryPort slaPolicyRepository;
-    private final NotificationRepositoryPort notificationRepository;
     private final TicketCodeGenerator ticketCodeGenerator;
     private final AuthorizationService authorizationService;
-    private final HashingService hashingService;
-    private final JsonCodec jsonCodec;
     private final Clock clock;
-    private final IdempotencyPolicy idempotencyPolicy;
     private final TicketLifecyclePolicy ticketLifecyclePolicy;
     private final TransactionRunner transactionRunner;
+    private final TicketAccessPolicy accessPolicy;
+    private final TicketResponseMapper responseMapper;
+    private final TicketHistoryRecorder historyRecorder;
+    private final TicketNotificationDispatcher notificationDispatcher;
+    private final TicketIdempotencyHandler idempotencyHandler;
 
     public TicketService(
         TicketRepositoryPort ticketRepository,
@@ -109,24 +105,30 @@ public class TicketService {
         this.ticketRepository = ticketRepository;
         this.ticketCommentRepository = ticketCommentRepository;
         this.ticketHistoryRepository = ticketHistoryRepository;
-        this.idempotencyRecordRepository = idempotencyRecordRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
         this.slaPolicyRepository = slaPolicyRepository;
-        this.notificationRepository = notificationRepository;
         this.ticketCodeGenerator = ticketCodeGenerator;
         this.authorizationService = authorizationService;
-        this.hashingService = hashingService;
-        this.jsonCodec = jsonCodec;
         this.clock = clock;
-        this.idempotencyPolicy = idempotencyPolicy;
         this.ticketLifecyclePolicy = ticketLifecyclePolicy;
         this.transactionRunner = transactionRunner;
+        this.accessPolicy = new TicketAccessPolicy();
+        this.responseMapper = new TicketResponseMapper(accessPolicy);
+        this.historyRecorder = new TicketHistoryRecorder(ticketHistoryRepository, jsonCodec);
+        this.notificationDispatcher = new TicketNotificationDispatcher(notificationRepository, userRepository);
+        this.idempotencyHandler = new TicketIdempotencyHandler(
+            idempotencyRecordRepository,
+            hashingService,
+            jsonCodec,
+            idempotencyPolicy,
+            clock
+        );
     }
 
     public PageResponse<TicketSummaryResponse> list(AuthenticatedUser currentUser, TicketFilterRequest filterRequest) {
         return transactionRunner.readOnly(() -> {
-            validateTicketFilter(filterRequest);
+            accessPolicy.validateFilter(filterRequest);
 
             PageResponse<Ticket> page = ticketRepository.findAll(new TicketQuery(
                 filterRequest.search(),
@@ -140,7 +142,7 @@ public class TicketService {
                 filterRequest.size(),
                 filterRequest.sortBy(),
                 filterRequest.direction(),
-                resolveVisibility(currentUser),
+                accessPolicy.resolveVisibility(currentUser),
                 currentUser.id()
             ));
             Map<String, User> usersById = loadUsersById(
@@ -151,14 +153,14 @@ public class TicketService {
             );
             Map<String, Category> categoriesById = loadCategoriesById(page.content().stream().map(Ticket::getCategoryId).toList());
 
-            return page.map(ticket -> toSummaryResponse(ticket, usersById, categoriesById));
+            return page.map(ticket -> responseMapper.toSummaryResponse(ticket, usersById, categoriesById));
         });
     }
 
     public TicketDetailResponse getById(AuthenticatedUser currentUser, String ticketId) {
         return transactionRunner.readOnly(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureCanViewTicket(currentUser, ticket);
+            accessPolicy.ensureCanViewTicket(currentUser, ticket);
             return toDetailResponse(ticket, currentUser);
         });
     }
@@ -166,9 +168,7 @@ public class TicketService {
     public TicketDetailResponse create(AuthenticatedUser currentUser, CreateTicketRequest request, String idempotencyKey) {
         return transactionRunner.required(() -> {
             authorizationService.requirePermission(currentUser, Permission.TICKET_CREATE);
-            if (idempotencyKey == null || idempotencyKey.isBlank()) {
-                throw new ValidationException("IDEMPOTENCY_KEY_REQUIRED", "The idempotency key is required.");
-            }
+            idempotencyHandler.requireKey(idempotencyKey);
 
             User requester = userRepository.findById(currentUser.id())
                 .orElseThrow(() -> new UnauthorizedException(
@@ -176,14 +176,10 @@ public class TicketService {
                     "The authenticated user no longer exists. Please sign in again."
                 ));
 
-            String requestHash = hashingService.hash(currentUser.id() + "|" + normalize(request.title()) + "|" + normalize(request.description()) + "|" + request.categoryId() + "|" + request.priority().name());
-            Optional<IdempotencyRecord> existingRecord = idempotencyRecordRepository.findByIdempotencyKeyAndUserId(idempotencyKey, currentUser.id());
-            if (existingRecord.isPresent()) {
-                IdempotencyRecord record = existingRecord.get();
-                if (!record.requestHash().equals(requestHash)) {
-                    throw new ConflictException("IDEMPOTENCY_KEY_CONFLICT", "The idempotency key was already used with a different payload.");
-                }
-                return deserializeStoredResponse(record.responseBody());
+            String requestHash = idempotencyHandler.hashCreateRequest(currentUser.id(), request);
+            Optional<TicketDetailResponse> storedResponse = idempotencyHandler.findStoredCreateResponse(idempotencyKey, currentUser.id(), requestHash);
+            if (storedResponse.isPresent()) {
+                return storedResponse.get();
             }
 
             Category category = findActiveCategory(request.categoryId());
@@ -202,16 +198,11 @@ public class TicketService {
             );
             ticket = ticketRepository.save(ticket);
 
-            addHistory(ticket.getId(), TicketHistoryAction.CREATED, currentUser.id(), null, null, "{\"code\":\"" + ticket.getCode() + "\"}");
-            notifySupportUsers(
-                NotificationType.TICKET_CREATED,
-                "Nuevo ticket creado",
-                "Se creo el ticket " + ticket.getCode() + ".",
-                ticket.getId()
-            );
+            historyRecorder.created(ticket.getId(), currentUser.id(), ticket.getCode());
+            notificationDispatcher.ticketCreated(ticket);
 
             TicketDetailResponse response = toDetailResponse(ticket, currentUser);
-            storeIdempotencyRecord(idempotencyKey, currentUser.id(), requestHash, ticket.getId(), response);
+            idempotencyHandler.storeCreateResponse(idempotencyKey, currentUser.id(), requestHash, ticket.getId(), response);
             return response;
         });
     }
@@ -219,8 +210,8 @@ public class TicketService {
     public TicketDetailResponse update(AuthenticatedUser currentUser, String ticketId, UpdateTicketRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureCanUpdateTicket(currentUser, ticket);
-            ensureVersion(ticket, request.version());
+            accessPolicy.ensureCanUpdateTicket(currentUser, ticket);
+            accessPolicy.ensureVersion(ticket, request.version());
 
             String previousTitle = ticket.getTitle();
             String previousDescription = ticket.getDescription();
@@ -240,13 +231,13 @@ public class TicketService {
             ticket = ticketRepository.save(ticket);
 
             if (!Objects.equals(previousTitle, ticket.getTitle()) || !Objects.equals(previousDescription, ticket.getDescription())) {
-                addHistory(ticket.getId(), TicketHistoryAction.UPDATED, currentUser.id(), previousTitle, ticket.getTitle(), null);
+                historyRecorder.updated(ticket.getId(), currentUser.id(), previousTitle, ticket.getTitle());
             }
             if (!Objects.equals(previousCategoryId, ticket.getCategoryId())) {
-                addHistory(ticket.getId(), TicketHistoryAction.CATEGORY_CHANGED, currentUser.id(), previousCategoryId, ticket.getCategoryId(), null);
+                historyRecorder.categoryChanged(ticket.getId(), currentUser.id(), previousCategoryId, ticket.getCategoryId());
             }
             if (previousPriority != ticket.getPriority()) {
-                addHistory(ticket.getId(), TicketHistoryAction.PRIORITY_CHANGED, currentUser.id(), previousPriority.name(), ticket.getPriority().name(), null);
+                historyRecorder.priorityChanged(ticket.getId(), currentUser.id(), previousPriority.name(), ticket.getPriority().name());
             }
 
             return toDetailResponse(ticket, currentUser);
@@ -257,8 +248,8 @@ public class TicketService {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
             authorizationService.requirePermission(currentUser, ticket.getAssignedAgentId() == null ? Permission.TICKET_ASSIGN : Permission.TICKET_REASSIGN);
-            ensureVersion(ticket, request.version());
-            ensureNotTerminal(ticket);
+            accessPolicy.ensureVersion(ticket, request.version());
+            accessPolicy.ensureNotTerminal(ticket);
 
             User assignee = userRepository.findById(request.agentId())
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "The assignee could not be found."));
@@ -273,8 +264,8 @@ public class TicketService {
             ticket.assign(assignee.id());
             ticket = ticketRepository.save(ticket);
 
-            addHistory(ticket.getId(), previousAgentId == null ? TicketHistoryAction.ASSIGNED : TicketHistoryAction.REASSIGNED, currentUser.id(), previousAgentId, assignee.id(), null);
-            notifyUser(assignee.id(), NotificationType.TICKET_ASSIGNED, "Ticket asignado", "Se te asigno el ticket " + ticket.getCode() + ".", ticket.getId());
+            historyRecorder.assigned(ticket.getId(), currentUser.id(), previousAgentId, assignee.id());
+            notificationDispatcher.ticketAssigned(ticket, assignee.id());
             return toDetailResponse(ticket, currentUser);
         });
     }
@@ -282,16 +273,16 @@ public class TicketService {
     public TicketDetailResponse start(AuthenticatedUser currentUser, String ticketId, VersionedRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureCanOperateTicket(currentUser, ticket);
+            accessPolicy.ensureCanOperateTicket(currentUser, ticket);
             authorizationService.requirePermission(currentUser, Permission.TICKET_RESOLVE);
-            ensureVersion(ticket, request.version());
+            accessPolicy.ensureVersion(ticket, request.version());
             if (ticket.getStatus() != TicketStatus.ASSIGNED) {
                 throw new ValidationException("INVALID_TICKET_TRANSITION", "The ticket must be in ASSIGNED status.");
             }
 
             ticket.start(clock.instant());
             ticket = ticketRepository.save(ticket);
-            addHistory(ticket.getId(), TicketHistoryAction.STARTED, currentUser.id(), TicketStatus.ASSIGNED.name(), TicketStatus.IN_PROGRESS.name(), null);
+            historyRecorder.started(ticket.getId(), currentUser.id());
             return toDetailResponse(ticket, currentUser);
         });
     }
@@ -299,16 +290,16 @@ public class TicketService {
     public TicketDetailResponse requestInformation(AuthenticatedUser currentUser, String ticketId, RequestInformationRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureCanOperateTicket(currentUser, ticket);
-            ensureVersion(ticket, request.version());
+            accessPolicy.ensureCanOperateTicket(currentUser, ticket);
+            accessPolicy.ensureVersion(ticket, request.version());
             if (ticket.getStatus() != TicketStatus.IN_PROGRESS) {
                 throw new ValidationException("INVALID_TICKET_TRANSITION", "The ticket must be in IN_PROGRESS status.");
             }
             addCommentInternal(currentUser, ticket, request.content(), CommentVisibility.PUBLIC);
             ticket.requestInformation(clock.instant());
             ticket = ticketRepository.save(ticket);
-            addHistory(ticket.getId(), TicketHistoryAction.REQUESTED_INFORMATION, currentUser.id(), TicketStatus.IN_PROGRESS.name(), TicketStatus.WAITING_FOR_CUSTOMER.name(), null);
-            notifyUser(ticket.getRequesterId(), NotificationType.INFORMATION_REQUESTED, "Se requiere informacion", "Hay una solicitud de informacion en el ticket " + ticket.getCode() + ".", ticket.getId());
+            historyRecorder.requestedInformation(ticket.getId(), currentUser.id());
+            notificationDispatcher.informationRequested(ticket);
             return toDetailResponse(ticket, currentUser);
         });
     }
@@ -316,8 +307,8 @@ public class TicketService {
     public TicketDetailResponse resolve(AuthenticatedUser currentUser, String ticketId, ResolveTicketRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureCanOperateTicket(currentUser, ticket);
-            ensureVersion(ticket, request.version());
+            accessPolicy.ensureCanOperateTicket(currentUser, ticket);
+            accessPolicy.ensureVersion(ticket, request.version());
             if (ticket.getStatus() != TicketStatus.IN_PROGRESS && ticket.getStatus() != TicketStatus.WAITING_FOR_CUSTOMER) {
                 throw new ValidationException("INVALID_TICKET_TRANSITION", "The ticket cannot be resolved from its current status.");
             }
@@ -327,8 +318,8 @@ public class TicketService {
 
             ticket.resolve(normalize(request.resolutionSummary()), clock.instant());
             ticket = ticketRepository.save(ticket);
-            addHistory(ticket.getId(), TicketHistoryAction.RESOLVED, currentUser.id(), null, ticket.getResolutionSummary(), null);
-            notifyUser(ticket.getRequesterId(), NotificationType.TICKET_RESOLVED, "Ticket resuelto", "El ticket " + ticket.getCode() + " fue resuelto.", ticket.getId());
+            historyRecorder.resolved(ticket.getId(), currentUser.id(), ticket.getResolutionSummary());
+            notificationDispatcher.ticketResolved(ticket);
             return toDetailResponse(ticket, currentUser);
         });
     }
@@ -336,21 +327,16 @@ public class TicketService {
     public TicketDetailResponse close(AuthenticatedUser currentUser, String ticketId, VersionedRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureVersion(ticket, request.version());
-            boolean canClose = currentUser.hasPermission(Permission.TICKET_CLOSE) && (
-                currentUser.hasPermission(Permission.TICKET_READ_ALL) || ticket.getRequesterId().equals(currentUser.id())
-            );
-            if (!canClose) {
-                throw new ForbiddenException("ACCESS_DENIED", "You do not have permission to close this ticket.");
-            }
+            accessPolicy.ensureVersion(ticket, request.version());
+            accessPolicy.ensureCanCloseTicket(currentUser, ticket);
             if (ticket.getStatus() != TicketStatus.RESOLVED) {
                 throw new ValidationException("INVALID_TICKET_TRANSITION", "The ticket must be resolved before closing.");
             }
 
             ticket.close(clock.instant());
             ticket = ticketRepository.save(ticket);
-            addHistory(ticket.getId(), TicketHistoryAction.CLOSED, currentUser.id(), null, null, null);
-            notifyUser(ticket.getRequesterId(), NotificationType.TICKET_CLOSED, "Ticket cerrado", "El ticket " + ticket.getCode() + " fue cerrado.", ticket.getId());
+            historyRecorder.closed(ticket.getId(), currentUser.id());
+            notificationDispatcher.ticketClosed(ticket);
             return toDetailResponse(ticket, currentUser);
         });
     }
@@ -358,7 +344,7 @@ public class TicketService {
     public TicketDetailResponse reopen(AuthenticatedUser currentUser, String ticketId, ReopenTicketRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureVersion(ticket, request.version());
+            accessPolicy.ensureVersion(ticket, request.version());
             if (ticket.getStatus() != TicketStatus.RESOLVED) {
                 throw new ValidationException("INVALID_TICKET_TRANSITION", "Only resolved tickets can be reopened.");
             }
@@ -366,22 +352,11 @@ public class TicketService {
                 throw new ValidationException("REOPEN_REASON_REQUIRED", "The reopen reason is required.");
             }
 
-            boolean isRequester = currentUser.hasPermission(Permission.TICKET_REOPEN)
-                && ticket.getRequesterId().equals(currentUser.id());
-            boolean isPrivileged = currentUser.hasPermission(Permission.TICKET_REOPEN) && currentUser.hasPermission(Permission.TICKET_READ_ALL);
-            if (!isRequester && !isPrivileged) {
-                throw new ForbiddenException("ACCESS_DENIED", "You do not have permission to reopen this ticket.");
-            }
-            if (isRequester && ticket.getResolvedAt() != null && ticket.getResolvedAt().isBefore(clock.instant().minus(7, ChronoUnit.DAYS))) {
-                throw new ValidationException("REOPEN_WINDOW_EXPIRED", "The ticket can no longer be reopened.");
-            }
-
+            accessPolicy.ensureCanReopenTicket(currentUser, ticket, clock.instant());
             ticket.reopen(clock.instant(), findActiveSlaPolicy(ticket.getPriority()));
             ticket = ticketRepository.save(ticket);
-            addHistory(ticket.getId(), TicketHistoryAction.REOPENED, currentUser.id(), TicketStatus.RESOLVED.name(), TicketStatus.IN_PROGRESS.name(), metadata("reason", request.reason()));
-            if (ticket.getAssignedAgentId() != null) {
-                notifyUser(ticket.getAssignedAgentId(), NotificationType.TICKET_REOPENED, "Ticket reabierto", "El ticket " + ticket.getCode() + " fue reabierto.", ticket.getId());
-            }
+            historyRecorder.reopened(ticket.getId(), currentUser.id(), request.reason());
+            notificationDispatcher.ticketReopened(ticket);
             return toDetailResponse(ticket, currentUser);
         });
     }
@@ -389,25 +364,15 @@ public class TicketService {
     public TicketDetailResponse cancel(AuthenticatedUser currentUser, String ticketId, CancelTicketRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureVersion(ticket, request.version());
+            accessPolicy.ensureVersion(ticket, request.version());
             if (request.reason() == null || request.reason().isBlank()) {
                 throw new ValidationException("CANCEL_REASON_REQUIRED", "The cancel reason is required.");
             }
 
-            boolean requesterCanCancel = currentUser.hasPermission(Permission.TICKET_CANCEL)
-                && ticket.getRequesterId().equals(currentUser.id())
-                && ticket.getStatus() == TicketStatus.CREATED;
-            boolean privilegedCanCancel = currentUser.hasPermission(Permission.TICKET_CANCEL)
-                && currentUser.hasPermission(Permission.TICKET_READ_ALL)
-                && Set.of(TicketStatus.CREATED, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_CUSTOMER).contains(ticket.getStatus());
-
-            if (!requesterCanCancel && !privilegedCanCancel) {
-                throw new ForbiddenException("ACCESS_DENIED", "You do not have permission to cancel this ticket.");
-            }
-
+            accessPolicy.ensureCanCancelTicket(currentUser, ticket);
             ticket.cancel(clock.instant());
             ticket = ticketRepository.save(ticket);
-            addHistory(ticket.getId(), TicketHistoryAction.CANCELLED, currentUser.id(), null, null, metadata("reason", request.reason()));
+            historyRecorder.cancelled(ticket.getId(), currentUser.id(), request.reason());
             return toDetailResponse(ticket, currentUser);
         });
     }
@@ -415,12 +380,12 @@ public class TicketService {
     public List<TicketCommentResponse> listComments(AuthenticatedUser currentUser, String ticketId) {
         return transactionRunner.readOnly(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureCanViewTicket(currentUser, ticket);
+            accessPolicy.ensureCanViewTicket(currentUser, ticket);
             List<TicketComment> comments = ticketCommentRepository.findAllByTicketIdOrderByCreatedAtAsc(ticketId);
             Map<String, User> usersById = loadUsersById(comments.stream().map(TicketComment::authorId).toList());
 
             return comments.stream()
-                .filter(comment -> comment.visibility() == CommentVisibility.PUBLIC || canSeeInternalComments(currentUser))
+                .filter(comment -> comment.visibility() == CommentVisibility.PUBLIC || accessPolicy.canSeeInternalComments(currentUser))
                 .map(comment -> toCommentResponse(comment, usersById))
                 .toList();
         });
@@ -429,9 +394,9 @@ public class TicketService {
     public TicketCommentResponse addComment(AuthenticatedUser currentUser, String ticketId, AddCommentRequest request) {
         return transactionRunner.required(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureCanViewTicket(currentUser, ticket);
-            ensureVersion(ticket, request.version());
-            ensureNotTerminal(ticket);
+            accessPolicy.ensureCanViewTicket(currentUser, ticket);
+            accessPolicy.ensureVersion(ticket, request.version());
+            accessPolicy.ensureNotTerminal(ticket);
             if (request.content() == null || request.content().isBlank()) {
                 throw new ValidationException("COMMENT_CONTENT_REQUIRED", "The comment content is required.");
             }
@@ -453,10 +418,10 @@ public class TicketService {
             ticket = ticketRepository.save(ticket);
 
             if (currentUser.role() != Role.CUSTOMER && visibility == CommentVisibility.PUBLIC && ticket.getRequesterId() != null) {
-                notifyUser(ticket.getRequesterId(), NotificationType.PUBLIC_COMMENT_ADDED, "Nuevo comentario", "Hay un nuevo comentario en el ticket " + ticket.getCode() + ".", ticket.getId());
+                notificationDispatcher.publicCommentAddedForRequester(ticket);
             }
             if (currentUser.role() == Role.CUSTOMER && ticket.getAssignedAgentId() != null) {
-                notifyUser(ticket.getAssignedAgentId(), NotificationType.PUBLIC_COMMENT_ADDED, "Respuesta del cliente", "El cliente respondio en el ticket " + ticket.getCode() + ".", ticket.getId());
+                notificationDispatcher.customerReplied(ticket);
             }
 
             Map<String, User> usersById = loadUsersById(List.of(comment.authorId()));
@@ -467,28 +432,19 @@ public class TicketService {
     public List<TicketHistoryResponse> listHistory(AuthenticatedUser currentUser, String ticketId) {
         return transactionRunner.readOnly(() -> {
             Ticket ticket = findTicket(ticketId);
-            ensureCanViewTicket(currentUser, ticket);
+            accessPolicy.ensureCanViewTicket(currentUser, ticket);
             authorizationService.requirePermission(currentUser, Permission.AUDIT_READ);
             List<TicketHistory> historyEntries = ticketHistoryRepository.findAllByTicketIdOrderByCreatedAtDesc(ticketId);
             Map<String, User> usersById = loadUsersById(historyEntries.stream().map(TicketHistory::performedBy).toList());
 
             return historyEntries.stream()
-                .map(entry -> new TicketHistoryResponse(
-                    entry.id(),
-                    entry.action(),
-                    entry.performedBy(),
-                    displayName(usersById.get(entry.performedBy())),
-                    entry.previousValue(),
-                    entry.newValue(),
-                    entry.metadataJson(),
-                    entry.createdAt()
-                ))
+                .map(entry -> responseMapper.toHistoryResponse(entry, usersById))
                 .toList();
         });
     }
 
     public void purgeExpiredIdempotencyRecords() {
-        transactionRunner.required(() -> idempotencyRecordRepository.deleteByExpiresAtBefore(clock.instant()));
+        transactionRunner.required(idempotencyHandler::purgeExpiredRecords);
     }
 
     public void autoCloseResolvedTickets() {
@@ -498,48 +454,10 @@ public class TicketService {
                 .forEach(ticket -> {
                     ticket.close(clock.instant());
                     Ticket savedTicket = ticketRepository.save(ticket);
-                    addHistory(
-                        savedTicket.getId(),
-                        TicketHistoryAction.CLOSED,
-                        SYSTEM_ACTOR,
-                        TicketStatus.RESOLVED.name(),
-                        TicketStatus.CLOSED.name(),
-                        "{\"source\":\"auto-close\"}"
-                    );
-                    notifyUser(
-                        savedTicket.getRequesterId(),
-                        NotificationType.TICKET_CLOSED,
-                        "Ticket cerrado automaticamente",
-                        "El ticket " + savedTicket.getCode() + " fue cerrado automaticamente por inactividad.",
-                        savedTicket.getId()
-                    );
+                    historyRecorder.autoClosed(savedTicket.getId(), SYSTEM_ACTOR);
+                    notificationDispatcher.ticketAutoClosed(savedTicket);
                 });
         });
-    }
-
-    private void validateTicketFilter(TicketFilterRequest filterRequest) {
-        if (filterRequest.page() < 0) {
-            throw new BadRequestException("INVALID_PAGE", "The page number must be greater than or equal to zero.");
-        }
-        if (filterRequest.size() < 1 || filterRequest.size() > MAX_PAGE_SIZE) {
-            throw new BadRequestException("INVALID_PAGE_SIZE", "The page size must be between 1 and " + MAX_PAGE_SIZE + ".");
-        }
-        if (filterRequest.sortBy() == null || !ALLOWED_SORT_FIELDS.contains(filterRequest.sortBy())) {
-            throw new BadRequestException("INVALID_SORT_FIELD", "The sort field is not supported.");
-        }
-        if (filterRequest.createdFrom() != null && filterRequest.createdTo() != null && filterRequest.createdFrom().isAfter(filterRequest.createdTo())) {
-            throw new BadRequestException("INVALID_DATE_RANGE", "The createdFrom value cannot be after createdTo.");
-        }
-    }
-
-    private TicketVisibility resolveVisibility(AuthenticatedUser currentUser) {
-        if (currentUser.hasPermission(Permission.TICKET_READ_ALL)) {
-            return TicketVisibility.ALL;
-        }
-        if (currentUser.hasPermission(Permission.TICKET_READ_ASSIGNED)) {
-            return TicketVisibility.ASSIGNED_OR_UNASSIGNED;
-        }
-        return TicketVisibility.REQUESTER;
     }
 
     private Ticket findTicket(String ticketId) {
@@ -565,63 +483,6 @@ public class TicketService {
         return policy;
     }
 
-    private void ensureCanViewTicket(AuthenticatedUser currentUser, Ticket ticket) {
-        if (currentUser.hasPermission(Permission.TICKET_READ_ALL)) {
-            return;
-        }
-        if (currentUser.hasPermission(Permission.TICKET_READ_ASSIGNED) && (currentUser.id().equals(ticket.getAssignedAgentId()) || ticket.getAssignedAgentId() == null)) {
-            return;
-        }
-        if (currentUser.hasPermission(Permission.TICKET_READ_OWN) && currentUser.id().equals(ticket.getRequesterId())) {
-            return;
-        }
-        throw new ForbiddenException("ACCESS_DENIED", "You do not have permission to view this ticket.");
-    }
-
-    private void ensureCanUpdateTicket(AuthenticatedUser currentUser, Ticket ticket) {
-        if (ticket.isTerminal()) {
-            throw new ValidationException("TICKET_TERMINAL", "Terminal tickets cannot be modified.");
-        }
-        boolean privilegedCanUpdate = currentUser.hasPermission(Permission.TICKET_UPDATE)
-            && currentUser.hasPermission(Permission.TICKET_READ_ALL);
-        if (privilegedCanUpdate) {
-            return;
-        }
-        boolean requesterCanUpdate = currentUser.hasPermission(Permission.TICKET_UPDATE)
-            && currentUser.id().equals(ticket.getRequesterId())
-            && ticket.getStatus() == TicketStatus.CREATED;
-        if (requesterCanUpdate) {
-            return;
-        }
-        throw new ForbiddenException("ACCESS_DENIED", "You do not have permission to update this ticket.");
-    }
-
-    private void ensureCanOperateTicket(AuthenticatedUser currentUser, Ticket ticket) {
-        if (currentUser.hasPermission(Permission.TICKET_READ_ALL)) {
-            return;
-        }
-        if (currentUser.hasPermission(Permission.TICKET_CHANGE_STATUS) && currentUser.id().equals(ticket.getAssignedAgentId())) {
-            return;
-        }
-        throw new ForbiddenException("ACCESS_DENIED", "You do not have permission to operate on this ticket.");
-    }
-
-    private boolean canSeeInternalComments(AuthenticatedUser currentUser) {
-        return currentUser.hasPermission(Permission.COMMENT_READ_INTERNAL);
-    }
-
-    private void ensureVersion(Ticket ticket, long version) {
-        if (ticket.getVersion() != version) {
-            throw new ConflictException("RESOURCE_VERSION_CONFLICT", "The ticket was modified by another request.");
-        }
-    }
-
-    private void ensureNotTerminal(Ticket ticket) {
-        if (ticket.isTerminal()) {
-            throw new ValidationException("TICKET_TERMINAL", "Terminal tickets cannot be modified.");
-        }
-    }
-
     private TicketComment addCommentInternal(AuthenticatedUser currentUser, Ticket ticket, String content, CommentVisibility visibility) {
         TicketComment savedComment = ticketCommentRepository.save(TicketComment.create(
             ticket.getId(),
@@ -634,44 +495,13 @@ public class TicketService {
             ticket.applyFirstResponseIfMissing(clock.instant());
         }
 
-        addHistory(
+        historyRecorder.commentAdded(
             ticket.getId(),
-            visibility == CommentVisibility.PUBLIC ? TicketHistoryAction.COMMENT_ADDED_PUBLIC : TicketHistoryAction.COMMENT_ADDED_INTERNAL,
             currentUser.id(),
-            null,
-            null,
-            "{\"commentId\":\"" + savedComment.id() + "\"}"
+            savedComment.id(),
+            visibility == CommentVisibility.PUBLIC
         );
         return savedComment;
-    }
-
-    private void addHistory(String ticketId, TicketHistoryAction action, String performedBy, String previousValue, String newValue, String metadataJson) {
-        ticketHistoryRepository.save(TicketHistory.create(ticketId, action, performedBy, previousValue, newValue, metadataJson));
-    }
-
-    private void notifySupportUsers(NotificationType type, String title, String message, String ticketId) {
-        List<User> recipients = userRepository.findAllByRoleInAndActiveTrue(List.of(Role.ADMIN, Role.SUPPORT_MANAGER));
-        recipients.forEach(user -> notifyUser(user.id(), type, title, message, ticketId));
-    }
-
-    private void notifyUser(String recipientId, NotificationType type, String title, String message, String ticketId) {
-        notificationRepository.save(Notification.create(recipientId, type, title, message, ticketId));
-    }
-
-    private void storeIdempotencyRecord(String idempotencyKey, String userId, String requestHash, String resourceId, TicketDetailResponse response) {
-        idempotencyRecordRepository.save(IdempotencyRecord.create(
-            idempotencyKey,
-            userId,
-            requestHash,
-            201,
-            jsonCodec.serialize(response),
-            resourceId,
-            clock.instant().plus(idempotencyPolicy.getRecordTtlHours(), ChronoUnit.HOURS)
-        ));
-    }
-
-    private TicketDetailResponse deserializeStoredResponse(String responseBody) {
-        return jsonCodec.deserialize(responseBody, TicketDetailResponse.class);
     }
 
     private Map<String, User> loadUsersById(Collection<String> userIds) {
@@ -694,32 +524,6 @@ public class TicketService {
             .collect(Collectors.toMap(Category::id, Function.identity()));
     }
 
-    private TicketSummaryResponse toSummaryResponse(
-        Ticket ticket,
-        Map<String, User> usersById,
-        Map<String, Category> categoriesById
-    ) {
-        return new TicketSummaryResponse(
-            ticket.getId(),
-            ticket.getCode(),
-            ticket.getTitle(),
-            ticket.getStatus(),
-            ticket.getPriority(),
-            ticket.getRequesterId(),
-            displayName(usersById.get(ticket.getRequesterId())),
-            ticket.getAssignedAgentId(),
-            displayName(usersById.get(ticket.getAssignedAgentId())),
-            ticket.getCategoryId(),
-            categoriesById.containsKey(ticket.getCategoryId()) ? categoriesById.get(ticket.getCategoryId()).name() : null,
-            ticket.getResolutionDueAt(),
-            ticket.isSlaFirstResponseBreached(),
-            ticket.isSlaResolutionBreached(),
-            ticket.getCreatedAt(),
-            ticket.getUpdatedAt(),
-            ticket.getVersion()
-        );
-    }
-
     private TicketDetailResponse toDetailResponse(Ticket ticket, AuthenticatedUser currentUser) {
         Map<String, User> usersById = loadUsersById(
             Stream.of(ticket.getRequesterId(), ticket.getAssignedAgentId())
@@ -727,216 +531,15 @@ public class TicketService {
                 .toList()
         );
         Map<String, Category> categoriesById = loadCategoriesById(List.of(ticket.getCategoryId()));
-        return new TicketDetailResponse(
-            ticket.getId(),
-            ticket.getCode(),
-            ticket.getTitle(),
-            ticket.getDescription(),
-            ticket.getStatus(),
-            ticket.getPriority(),
-            ticket.getRequesterId(),
-            displayName(usersById.get(ticket.getRequesterId())),
-            ticket.getAssignedAgentId(),
-            displayName(usersById.get(ticket.getAssignedAgentId())),
-            ticket.getCategoryId(),
-            categoriesById.containsKey(ticket.getCategoryId()) ? categoriesById.get(ticket.getCategoryId()).name() : null,
-            ticket.getFirstResponseDueAt(),
-            ticket.getResolutionDueAt(),
-            ticket.getFirstRespondedAt(),
-            ticket.getResolvedAt(),
-            ticket.getClosedAt(),
-            ticket.getCancelledAt(),
-            ticket.getSlaPausedAt(),
-            ticket.getAccumulatedPausedSeconds(),
-            ticket.isSlaFirstResponseBreached(),
-            ticket.isSlaResolutionBreached(),
-            ticket.getResolutionSummary(),
-            ticket.getCreatedAt(),
-            ticket.getUpdatedAt(),
-            ticket.getVersion(),
-            availableActions(currentUser, ticket)
-        );
+        return responseMapper.toDetailResponse(ticket, currentUser, usersById, categoriesById);
     }
 
     private TicketCommentResponse toCommentResponse(TicketComment comment, Map<String, User> usersById) {
-        return new TicketCommentResponse(
-            comment.id(),
-            comment.ticketId(),
-            comment.authorId(),
-            displayName(usersById.get(comment.authorId())),
-            comment.content(),
-            comment.visibility(),
-            comment.createdAt(),
-            comment.updatedAt()
-        );
-    }
-
-    private List<String> availableActions(AuthenticatedUser currentUser, Ticket ticket) {
-        List<String> actions = new ArrayList<>();
-        if (currentUser.hasPermission(Permission.TICKET_READ_ALL) || currentUser.id().equals(ticket.getRequesterId())) {
-            if (ticket.getStatus() == TicketStatus.CREATED) {
-                actions.add("update");
-                actions.add("cancel");
-            }
-            if (ticket.getStatus() == TicketStatus.RESOLVED) {
-                actions.add("close");
-                actions.add("reopen");
-            }
-        }
-        if (!ticket.isTerminal() && (currentUser.hasPermission(Permission.TICKET_ASSIGN) || currentUser.hasPermission(Permission.TICKET_REASSIGN))) {
-            actions.add("assign");
-        }
-        if (currentUser.hasPermission(Permission.TICKET_CHANGE_STATUS) && (currentUser.hasPermission(Permission.TICKET_READ_ALL) || currentUser.id().equals(ticket.getAssignedAgentId()))) {
-            if (ticket.getStatus() == TicketStatus.ASSIGNED) {
-                actions.add("start");
-            }
-            if (ticket.getStatus() == TicketStatus.IN_PROGRESS) {
-                actions.add("request-information");
-                actions.add("resolve");
-            }
-            if (ticket.getStatus() == TicketStatus.WAITING_FOR_CUSTOMER) {
-                actions.add("resolve");
-            }
-        }
-        if (!ticket.isTerminal() && (
-            currentUser.hasPermission(Permission.COMMENT_CREATE_PUBLIC) ||
-                currentUser.hasPermission(Permission.COMMENT_CREATE_INTERNAL)
-        )) {
-            actions.add("comment");
-        }
-        return actions;
-    }
-
-    private String displayName(User user) {
-        if (user == null) {
-            return null;
-        }
-        return user.displayName();
+        return responseMapper.toCommentResponse(comment, usersById);
     }
 
     private String normalize(String value) {
         return value == null ? "" : value.trim();
     }
 
-    private String metadata(String key, String value) {
-        return jsonCodec.serialize(Map.of(key, normalize(value)));
-    }
-
-    public record TicketFilterRequest(
-        String search,
-        TicketStatus status,
-        TicketPriority priority,
-        String categoryId,
-        String assignedAgentId,
-        Instant createdFrom,
-        Instant createdTo,
-        int page,
-        int size,
-        String sortBy,
-        SortDirection direction
-    ) {
-    }
-
-    public record CreateTicketRequest(String title, String description, String categoryId, TicketPriority priority) {
-    }
-
-    public record UpdateTicketRequest(long version, String title, String description, String categoryId, TicketPriority priority) {
-    }
-
-    public record AssignTicketRequest(long version, String agentId) {
-    }
-
-    public record VersionedRequest(long version) {
-    }
-
-    public record RequestInformationRequest(long version, String content) {
-    }
-
-    public record ResolveTicketRequest(long version, String resolutionSummary) {
-    }
-
-    public record ReopenTicketRequest(long version, String reason) {
-    }
-
-    public record CancelTicketRequest(long version, String reason) {
-    }
-
-    public record AddCommentRequest(long version, String content, CommentVisibility visibility) {
-    }
-
-    public record TicketSummaryResponse(
-        String id,
-        String code,
-        String title,
-        TicketStatus status,
-        TicketPriority priority,
-        String requesterId,
-        String requesterName,
-        String assignedAgentId,
-        String assignedAgentName,
-        String categoryId,
-        String categoryName,
-        Instant resolutionDueAt,
-        boolean slaFirstResponseBreached,
-        boolean slaResolutionBreached,
-        Instant createdAt,
-        Instant updatedAt,
-        long version
-    ) {
-    }
-
-    public record TicketDetailResponse(
-        String id,
-        String code,
-        String title,
-        String description,
-        TicketStatus status,
-        TicketPriority priority,
-        String requesterId,
-        String requesterName,
-        String assignedAgentId,
-        String assignedAgentName,
-        String categoryId,
-        String categoryName,
-        Instant firstResponseDueAt,
-        Instant resolutionDueAt,
-        Instant firstRespondedAt,
-        Instant resolvedAt,
-        Instant closedAt,
-        Instant cancelledAt,
-        Instant slaPausedAt,
-        long accumulatedPausedSeconds,
-        boolean slaFirstResponseBreached,
-        boolean slaResolutionBreached,
-        String resolutionSummary,
-        Instant createdAt,
-        Instant updatedAt,
-        long version,
-        List<String> availableActions
-    ) {
-    }
-
-    public record TicketCommentResponse(
-        String id,
-        String ticketId,
-        String authorId,
-        String authorName,
-        String content,
-        CommentVisibility visibility,
-        Instant createdAt,
-        Instant updatedAt
-    ) {
-    }
-
-    public record TicketHistoryResponse(
-        String id,
-        TicketHistoryAction action,
-        String performedBy,
-        String performedByName,
-        String previousValue,
-        String newValue,
-        String metadataJson,
-        Instant createdAt
-    ) {
-    }
 }
