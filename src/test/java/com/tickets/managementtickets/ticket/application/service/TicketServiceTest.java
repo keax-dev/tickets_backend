@@ -54,56 +54,73 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
+// This test suite verifies ticket application-service behavior around filtering, auth edge cases, mapping, and scheduled closure.
 class TicketServiceTest {
 
+    // Repository mock for the main ticket aggregate persistence boundary.
     @Mock
     private TicketRepositoryPort ticketRepository;
 
+    // Repository mock for ticket comments; kept here because TicketService coordinates this dependency in other flows.
     @Mock
     private TicketCommentRepositoryPort ticketCommentRepository;
 
+    // Repository mock for the ticket audit trail.
     @Mock
     private TicketHistoryRepositoryPort ticketHistoryRepository;
 
+    // Repository mock for idempotency records used by create/update commands.
     @Mock
     private IdempotencyRecordRepositoryPort idempotencyRecordRepository;
 
+    // Repository mock for users loaded by the service during authorization and mapping.
     @Mock
     private UserRepositoryPort userRepository;
 
+    // Repository mock for category lookups.
     @Mock
     private CategoryRepositoryPort categoryRepository;
 
+    // Repository mock for SLA policy lookups.
     @Mock
     private SlaPolicyRepositoryPort slaPolicyRepository;
 
+    // Repository mock for outbound notifications triggered by use cases.
     @Mock
     private NotificationRepositoryPort notificationRepository;
 
+    // Generator mock for human-readable ticket codes.
     @Mock
     private TicketCodeGenerator ticketCodeGenerator;
 
+    // Authorization domain/application collaborator used by protected use cases.
     @Mock
     private AuthorizationService authorizationService;
 
+    // Hashing collaborator used by idempotency and related logic.
     @Mock
     private HashingService hashingService;
 
+    // System under test: this is the real application service instance wired with mocks/fakes.
     private TicketService ticketService;
+    // Shared authenticated principal reused by read-oriented tests.
     private AuthenticatedUser currentUser;
 
     @BeforeEach
     void setUp() {
+        // Arrange shared test fixture: use direct transactions and a real JSON codec over a mocked persistence boundary.
         IdempotencyPolicy idempotencyPolicy = () -> 24;
         TicketLifecyclePolicy ticketLifecyclePolicy = () -> 7;
         TransactionRunner transactionRunner = new TransactionRunner() {
             @Override
             public <T> T readOnly(java.util.function.Supplier<T> action) {
+                // Execute the callback immediately because unit tests do not need a real transaction manager.
                 return action.get();
             }
 
             @Override
             public <T> T required(java.util.function.Supplier<T> action) {
+                // Execute the callback immediately for the same reason.
                 return action.get();
             }
         };
@@ -112,8 +129,10 @@ class TicketServiceTest {
             @Override
             public String serialize(Object value) {
                 try {
+                    // Reuse Jackson to mimic the real JSON serialization behavior used by the service.
                     return objectMapper.writeValueAsString(value);
                 } catch (Exception exception) {
+                    // Fail fast if a test fixture cannot be serialized.
                     throw new IllegalStateException(exception);
                 }
             }
@@ -121,13 +140,16 @@ class TicketServiceTest {
             @Override
             public <T> T deserialize(String value, Class<T> type) {
                 try {
+                    // Reuse Jackson to mimic the real JSON deserialization behavior used by the service.
                     return objectMapper.readValue(value, type);
                 } catch (Exception exception) {
+                    // Fail fast if a test fixture cannot be deserialized.
                     throw new IllegalStateException(exception);
                 }
             }
         };
 
+        // Instantiate the real service with mocked outbound ports, a fixed clock, and lightweight fakes.
         ticketService = new TicketService(
             ticketRepository,
             ticketCommentRepository,
@@ -153,12 +175,14 @@ class TicketServiceTest {
             "User",
             "Test",
             Role.CUSTOMER,
+            // This user can read only their own tickets, which is enough for the scenarios below.
             Set.of(Permission.TICKET_READ_OWN)
         );
     }
 
     @Test
     void shouldRejectUnsupportedSortField() {
+        // Arrange: build a list filter with a sort field outside the public contract.
         TicketFilterRequest filterRequest = new TicketFilterRequest(
             null,
             null,
@@ -173,17 +197,20 @@ class TicketServiceTest {
             SortDirection.DESC
         );
 
+        // Act: execute the list use case with the invalid filter.
         BadRequestException exception = assertThrows(
             BadRequestException.class,
             () -> ticketService.list(currentUser, filterRequest)
         );
 
+        // Assert: verify validation stops before repository access.
         assertEquals("INVALID_SORT_FIELD", exception.getCode());
         verifyNoInteractions(ticketRepository);
     }
 
     @Test
     void shouldRejectInvalidCreatedAtRange() {
+        // Arrange: build a filter where the start date is after the end date.
         TicketFilterRequest filterRequest = new TicketFilterRequest(
             null,
             null,
@@ -198,17 +225,20 @@ class TicketServiceTest {
             SortDirection.DESC
         );
 
+        // Act: execute the list use case with the invalid date range.
         BadRequestException exception = assertThrows(
             BadRequestException.class,
             () -> ticketService.list(currentUser, filterRequest)
         );
 
+        // Assert: verify validation stops before repository access.
         assertEquals("INVALID_DATE_RANGE", exception.getCode());
         verifyNoInteractions(ticketRepository);
     }
 
     @Test
     void shouldRejectCreateWhenAuthenticatedUserNoLongerExists() {
+        // Arrange: create an authenticated principal whose user row no longer exists.
         AuthenticatedUser customerUser = new AuthenticatedUser(
             "missing-user",
             "customer@test.com",
@@ -218,8 +248,10 @@ class TicketServiceTest {
             Set.of(Permission.TICKET_CREATE, Permission.TICKET_READ_OWN)
         );
 
+        // Simulate the repository lookup performed by the service when it rehydrates the requester.
         when(userRepository.findById("missing-user")).thenReturn(Optional.empty());
 
+        // Act: attempt to create a ticket with the stale authenticated principal.
         UnauthorizedException exception = assertThrows(
             UnauthorizedException.class,
             () -> ticketService.create(
@@ -234,12 +266,14 @@ class TicketServiceTest {
             )
         );
 
+        // Assert: verify the use case fails before ticket persistence or side effects.
         assertEquals("AUTHENTICATED_USER_NOT_FOUND", exception.getCode());
         verifyNoInteractions(ticketRepository, categoryRepository, slaPolicyRepository, notificationRepository, idempotencyRecordRepository);
     }
 
     @Test
     void shouldReturnTicketDetailWhenAssignedAgentIsNull() {
+        // Arrange: mock a visible ticket with no assigned agent.
         Ticket ticket = new Ticket(
             "ticket-1",
             "TCK-2026-000001",
@@ -267,17 +301,22 @@ class TicketServiceTest {
         );
 
         when(ticketRepository.findById("ticket-1")).thenReturn(Optional.of(ticket));
+        // No requester/agent/category details are needed for this edge case, so return empty lookups.
         when(userRepository.findAllById(anyIterable())).thenReturn(List.of());
         when(categoryRepository.findAllById(anyIterable())).thenReturn(List.of());
 
+        // Act: load the ticket detail.
         TicketDetailResponse response = ticketService.getById(currentUser, "ticket-1");
 
+        // Assert: the service should return the ticket detail instead of failing on a missing assignee.
         assertEquals("ticket-1", response.id());
+        // The important part of this regression test: a null assigned agent must remain null in the response.
         assertNull(response.assignedAgentId());
     }
 
     @Test
     void shouldRecordSystemActorWhenAutoClosingResolvedTickets() {
+        // Arrange: mock an old resolved ticket eligible for automatic closure.
         Ticket ticket = new Ticket(
             "ticket-1",
             "TCK-2026-000001",
@@ -305,12 +344,16 @@ class TicketServiceTest {
         );
 
         when(ticketRepository.findAllByStatusAndResolvedAtBefore(eq(TicketStatus.RESOLVED), any(Instant.class))).thenReturn(List.of(ticket));
+        // Persist the same ticket instance after the service mutates it, which is enough for this unit test.
         when(ticketRepository.save(any(Ticket.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
+        // Act: run the scheduled auto-close use case.
         ticketService.autoCloseResolvedTickets();
 
+        // Assert: capture the history entry because we want to inspect what actor id the service stored.
         ArgumentCaptor<TicketHistory> historyCaptor = ArgumentCaptor.forClass(TicketHistory.class);
         verify(ticketHistoryRepository).save(historyCaptor.capture());
+        // Auto-close is a system action, so the history must use the predefined system actor id.
         assertEquals("00000000-0000-0000-0000-000000000000", historyCaptor.getValue().performedBy());
     }
 }

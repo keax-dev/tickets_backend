@@ -32,6 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+// This test suite verifies authentication lockout behavior in the application service without Spring Security.
 class AuthServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-07-16T00:00:00Z");
@@ -61,6 +62,7 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Arrange shared test fixture: wire AuthService with mocked ports and a direct transaction runner.
         authService = new AuthService(
             userRepository,
             refreshTokenRepository,
@@ -78,6 +80,7 @@ class AuthServiceTest {
 
     @Test
     void shouldLockAccountAfterConfiguredFailedAttempts() {
+        // Arrange: create an active user one failed attempt away from lockout.
         User user = new User(
             "user-1",
             "Ana",
@@ -94,11 +97,13 @@ class AuthServiceTest {
         when(userRepository.findByEmail("ana@test.com")).thenReturn(Optional.of(user));
         when(passwordHashingService.matches("bad-password", "encoded-password")).thenReturn(false);
 
+        // Act: attempt login with an invalid password.
         UnauthorizedException exception = assertThrows(
             UnauthorizedException.class,
             () -> authService.login("ana@test.com", "bad-password")
         );
 
+        // Assert: verify the failed attempt is saved with lockout metadata.
         assertEquals("INVALID_CREDENTIALS", exception.getCode());
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
@@ -108,6 +113,7 @@ class AuthServiceTest {
 
     @Test
     void shouldRejectLockedAccountBeforeCheckingPassword() {
+        // Arrange: create a user whose account is already locked.
         User user = new User(
             "user-1",
             "Ana",
@@ -123,11 +129,13 @@ class AuthServiceTest {
         );
         when(userRepository.findByEmail("ana@test.com")).thenReturn(Optional.of(user));
 
+        // Act: attempt login while the account is locked.
         UnauthorizedException exception = assertThrows(
             UnauthorizedException.class,
             () -> authService.login("ana@test.com", "any-password")
         );
 
+        // Assert: verify password hashing is skipped and the lockout error is returned.
         assertEquals("ACCOUNT_LOCKED", exception.getCode());
         verify(passwordHashingService, never()).matches("any-password", "encoded-password");
         assertTrue(user.isLoginLocked(NOW));
