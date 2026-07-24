@@ -6,6 +6,9 @@ import com.tickets.managementtickets.identity.infrastructure.web.dto.CreateUserR
 import com.tickets.managementtickets.identity.infrastructure.web.dto.StatusRequest;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.UpdateUserRequest;
 import com.tickets.managementtickets.identity.infrastructure.web.dto.UserResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -20,6 +23,8 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/users")
+@Tag(name = "Users", description = "User administration endpoints.")
+@SecurityRequirement(name = "bearerAuth")
 public class UserController {
 
     private final UserManagementService userManagementService;
@@ -31,6 +36,7 @@ public class UserController {
     }
 
     @GetMapping
+    @Operation(summary = "List users", description = "Returns the user catalog available to the authenticated administrator or manager.")
     public List<UserResponse> list() {
         return userManagementService.list(currentUserProvider.requireCurrentUser()).stream()
             .map(UserResponse::from)
@@ -38,11 +44,13 @@ public class UserController {
     }
 
     @GetMapping("/{userId}")
+    @Operation(summary = "Get user detail", description = "Returns a single user by identifier.")
     public UserResponse getById(@PathVariable String userId) {
         return UserResponse.from(userManagementService.getById(currentUserProvider.requireCurrentUser(), userId));
     }
 
     @PostMapping
+    @Operation(summary = "Create a user", description = "Creates a new platform user with the requested role.")
     public UserResponse create(@Valid @RequestBody CreateUserRequest request) {
         return UserResponse.from(
             userManagementService.create(
@@ -59,6 +67,7 @@ public class UserController {
     }
 
     @PutMapping("/{userId}")
+    @Operation(summary = "Update a user", description = "Updates user profile data and role.")
     public UserResponse update(
         @PathVariable String userId,
         @Valid @RequestBody UpdateUserRequest request
@@ -79,6 +88,7 @@ public class UserController {
     }
 
     @PatchMapping("/{userId}/status")
+    @Operation(summary = "Update user status", description = "Activates or deactivates an existing user.")
     public UserResponse updateStatus(
         @PathVariable String userId,
         @Valid @RequestBody StatusRequest request

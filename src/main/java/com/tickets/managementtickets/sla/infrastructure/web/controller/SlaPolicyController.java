@@ -5,6 +5,9 @@ import com.tickets.managementtickets.sla.application.service.SlaPolicyService;
 import com.tickets.managementtickets.sla.infrastructure.web.dto.SlaPolicyResponse;
 import com.tickets.managementtickets.sla.infrastructure.web.dto.UpdateSlaPolicyRequest;
 import com.tickets.managementtickets.shared.domain.model.TicketPriority;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +20,8 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/sla-policies")
+@Tag(name = "SLA Policies", description = "SLA policy catalog administration endpoints.")
+@SecurityRequirement(name = "bearerAuth")
 public class SlaPolicyController {
 
     private final SlaPolicyService slaPolicyService;
@@ -28,6 +33,7 @@ public class SlaPolicyController {
     }
 
     @GetMapping
+    @Operation(summary = "List SLA policies", description = "Returns the SLA policy catalog for all supported ticket priorities.")
     public List<SlaPolicyResponse> list() {
         return slaPolicyService.list(currentUserProvider.requireCurrentUser()).stream()
             .map(SlaPolicyResponse::from)
@@ -35,6 +41,7 @@ public class SlaPolicyController {
     }
 
     @PutMapping("/{priority}")
+    @Operation(summary = "Update an SLA policy", description = "Updates first-response hours, resolution hours, and active flag for a priority.")
     public SlaPolicyResponse update(
         @PathVariable TicketPriority priority,
         @Valid @RequestBody UpdateSlaPolicyRequest request

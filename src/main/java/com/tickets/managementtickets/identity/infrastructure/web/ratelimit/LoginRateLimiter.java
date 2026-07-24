@@ -1,7 +1,9 @@
 package com.tickets.managementtickets.identity.infrastructure.web.ratelimit;
 
+import com.tickets.managementtickets.identity.application.port.AuthMetricsPort;
 import com.tickets.managementtickets.identity.infrastructure.security.SecurityProperties;
 import com.tickets.managementtickets.shared.application.exception.TooManyRequestsException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -19,10 +21,17 @@ public class LoginRateLimiter {
     private final ConcurrentMap<String, Deque<Instant>> attemptsByKey = new ConcurrentHashMap<>();
     private final SecurityProperties securityProperties;
     private final Clock clock;
+    private final AuthMetricsPort authMetricsPort;
 
     public LoginRateLimiter(SecurityProperties securityProperties, Clock clock) {
+        this(securityProperties, clock, AuthMetricsPort.NO_OP);
+    }
+
+    @Autowired
+    public LoginRateLimiter(SecurityProperties securityProperties, Clock clock, AuthMetricsPort authMetricsPort) {
         this.securityProperties = securityProperties;
         this.clock = clock;
+        this.authMetricsPort = authMetricsPort;
     }
 
     public String keyFor(String remoteAddress, String email) {
@@ -36,6 +45,7 @@ public class LoginRateLimiter {
         synchronized (attempts) {
             evictExpired(attempts);
             if (attempts.size() >= securityProperties.getLoginRateLimitMaxAttempts()) {
+                authMetricsPort.recordRateLimitBlocked();
                 throw new TooManyRequestsException("LOGIN_RATE_LIMITED", "Too many login attempts. Please try again later.");
             }
         }

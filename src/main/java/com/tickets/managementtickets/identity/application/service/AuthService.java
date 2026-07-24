@@ -3,6 +3,7 @@ package com.tickets.managementtickets.identity.application.service;
 import com.tickets.managementtickets.identity.application.model.AuthCookie;
 import com.tickets.managementtickets.identity.application.model.AuthenticatedUser;
 import com.tickets.managementtickets.identity.application.port.AccessTokenService;
+import com.tickets.managementtickets.identity.application.port.AuthMetricsPort;
 import com.tickets.managementtickets.identity.application.port.AuthSecuritySettings;
 import com.tickets.managementtickets.identity.application.port.CurrentAuthenticatedUserProvider;
 import com.tickets.managementtickets.identity.application.port.RefreshTokenRepositoryPort;
@@ -37,6 +38,7 @@ public class AuthService {
     private final Clock clock;
     private final TransactionRunner transactionRunner;
     private final IdentityResponseMapper responseMapper;
+    private final AuthMetricsPort metricsPort;
 
     public AuthService(
         UserRepositoryPort userRepository,
@@ -51,6 +53,36 @@ public class AuthService {
         Clock clock,
         TransactionRunner transactionRunner
     ) {
+        this(
+            userRepository,
+            refreshTokenRepository,
+            passwordHashingService,
+            rolePermissionService,
+            accessTokenService,
+            refreshTokenGenerator,
+            securityProperties,
+            hashingService,
+            currentUserProvider,
+            clock,
+            transactionRunner,
+            AuthMetricsPort.NO_OP
+        );
+    }
+
+    public AuthService(
+        UserRepositoryPort userRepository,
+        RefreshTokenRepositoryPort refreshTokenRepository,
+        PasswordHashingService passwordHashingService,
+        RolePermissionService rolePermissionService,
+        AccessTokenService accessTokenService,
+        RefreshTokenGenerator refreshTokenGenerator,
+        AuthSecuritySettings securityProperties,
+        HashingService hashingService,
+        CurrentAuthenticatedUserProvider currentUserProvider,
+        Clock clock,
+        TransactionRunner transactionRunner,
+        AuthMetricsPort metricsPort
+    ) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordHashingService = passwordHashingService;
@@ -63,21 +95,22 @@ public class AuthService {
         this.clock = clock;
         this.transactionRunner = transactionRunner;
         this.responseMapper = new IdentityResponseMapper();
+        this.metricsPort = metricsPort;
     }
 
     public AuthResult login(String email, String password) {
         return transactionRunner.required(() -> {
             User user = userRepository.findByEmail(normalizeEmail(email))
-                .orElseThrow(() -> new UnauthorizedException("INVALID_CREDENTIALS", "Invalid credentials."));
+                .orElseThrow(() -> unauthorized("INVALID_CREDENTIALS", "Invalid credentials."));
 
             if (!user.active()) {
-                throw new UnauthorizedException("USER_INACTIVE", "The user is inactive.");
+                throw unauthorized("USER_INACTIVE", "The user is inactive.");
             }
 
             Instant now = clock.instant();
             User loginCandidate = user.clearExpiredLoginLock(now);
             if (loginCandidate.isLoginLocked(now)) {
-                throw new UnauthorizedException("ACCOUNT_LOCKED", "The account is temporarily locked. Please try again later.");
+                throw unauthorized("ACCOUNT_LOCKED", "The account is temporarily locked. Please try again later.");
             }
 
             if (!passwordHashingService.matches(password, loginCandidate.passwordHash())) {
@@ -86,10 +119,11 @@ public class AuthService {
                     securityProperties.getMaxFailedLoginAttempts(),
                     securityProperties.getAccountLockMinutes()
                 ));
-                throw new UnauthorizedException("INVALID_CREDENTIALS", "Invalid credentials.");
+                throw unauthorized("INVALID_CREDENTIALS", "Invalid credentials.");
             }
 
             User loggedInUser = userRepository.save(loginCandidate.recordSuccessfulLogin(now));
+            metricsPort.recordLoginSuccess(loggedInUser.role());
             return issueTokens(buildAuthenticatedUser(loggedInUser), null);
         });
     }
@@ -97,27 +131,28 @@ public class AuthService {
     public AuthResult refresh(String rawRefreshToken) {
         return transactionRunner.required(() -> {
             if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
-                throw new UnauthorizedException("REFRESH_TOKEN_MISSING", "A refresh token is required.");
+                throw refreshUnauthorized("REFRESH_TOKEN_MISSING", "A refresh token is required.");
             }
 
             String tokenHash = hashingService.hash(rawRefreshToken);
             RefreshToken existingToken = refreshTokenRepository.findByTokenHash(tokenHash)
-                .orElseThrow(() -> new UnauthorizedException("INVALID_REFRESH_TOKEN", "The refresh token is invalid."));
+                .orElseThrow(() -> refreshUnauthorized("INVALID_REFRESH_TOKEN", "The refresh token is invalid."));
 
             if (existingToken.revokedAt() != null) {
-                throw new UnauthorizedException("REFRESH_TOKEN_REVOKED", "The refresh token has already been revoked.");
+                throw refreshUnauthorized("REFRESH_TOKEN_REVOKED", "The refresh token has already been revoked.");
             }
             if (existingToken.expiresAt().isBefore(clock.instant())) {
-                throw new UnauthorizedException("REFRESH_TOKEN_EXPIRED", "The refresh token has expired.");
+                throw refreshUnauthorized("REFRESH_TOKEN_EXPIRED", "The refresh token has expired.");
             }
 
             User user = userRepository.findById(existingToken.userId())
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "The user could not be found."));
 
             if (!user.active()) {
-                throw new UnauthorizedException("USER_INACTIVE", "The user is inactive.");
+                throw refreshUnauthorized("USER_INACTIVE", "The user is inactive.");
             }
 
+            metricsPort.recordRefreshSuccess(user.role());
             return issueTokens(buildAuthenticatedUser(user), existingToken);
         });
     }
@@ -194,6 +229,16 @@ public class AuthService {
 
     private String normalizeEmail(String email) {
         return email == null ? "" : email.trim().toLowerCase();
+    }
+
+    private UnauthorizedException unauthorized(String code, String message) {
+        metricsPort.recordLoginFailure(code);
+        return new UnauthorizedException(code, message);
+    }
+
+    private UnauthorizedException refreshUnauthorized(String code, String message) {
+        metricsPort.recordRefreshFailure(code);
+        return new UnauthorizedException(code, message);
     }
 
 }

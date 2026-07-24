@@ -4,6 +4,9 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -11,6 +14,7 @@ import java.io.IOException;
 import java.util.UUID;
 
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class CorrelationIdFilter extends OncePerRequestFilter {
 
     public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
@@ -29,6 +33,11 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
 
         request.setAttribute(CORRELATION_ID_ATTRIBUTE, correlationId);
         response.setHeader(CORRELATION_ID_HEADER, correlationId);
-        filterChain.doFilter(request, response);
+        MDC.put(CORRELATION_ID_ATTRIBUTE, correlationId);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            MDC.remove(CORRELATION_ID_ATTRIBUTE);
+        }
     }
 }

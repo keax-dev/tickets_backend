@@ -5,6 +5,8 @@ import com.tickets.managementtickets.shared.application.exception.ApplicationErr
 import com.tickets.managementtickets.shared.domain.exception.DomainRuleViolationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.AccessDeniedException;
@@ -21,8 +23,15 @@ import java.util.List;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(ApplicationException.class)
     ProblemDetail handleApplicationException(ApplicationException exception, HttpServletRequest request) {
+        if (exception.getStatus() == ApplicationErrorStatus.UNAUTHORIZED || exception.getStatus() == ApplicationErrorStatus.FORBIDDEN) {
+            log.info("Application error {} for {} {}", exception.getCode(), request.getMethod(), request.getRequestURI());
+        } else {
+            log.warn("Application error {} for {} {}: {}", exception.getCode(), request.getMethod(), request.getRequestURI(), exception.getMessage());
+        }
         return buildProblemDetail(toHttpStatus(exception.getStatus()), exception.getCode(), exception.getMessage(), request, List.of());
     }
 
@@ -65,6 +74,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     ProblemDetail handleUnexpectedException(Exception exception, HttpServletRequest request) {
+        log.error("Unexpected error for {} {}", request.getMethod(), request.getRequestURI(), exception);
         return buildProblemDetail(HttpStatus.INTERNAL_SERVER_ERROR, "UNEXPECTED_ERROR", "An unexpected error occurred.", request, List.of());
     }
 

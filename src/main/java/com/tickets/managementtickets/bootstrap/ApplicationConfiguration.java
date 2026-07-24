@@ -6,6 +6,7 @@ import com.tickets.managementtickets.category.application.port.CategoryRepositor
 import com.tickets.managementtickets.category.application.service.CategoryService;
 import com.tickets.managementtickets.dashboard.application.service.DashboardService;
 import com.tickets.managementtickets.identity.application.port.AccessTokenService;
+import com.tickets.managementtickets.identity.application.port.AuthMetricsPort;
 import com.tickets.managementtickets.identity.application.port.AuthSecuritySettings;
 import com.tickets.managementtickets.identity.application.port.CurrentAuthenticatedUserProvider;
 import com.tickets.managementtickets.identity.application.port.RefreshTokenGenerator;
@@ -30,6 +31,7 @@ import com.tickets.managementtickets.ticket.application.port.TicketCodeGenerator
 import com.tickets.managementtickets.ticket.application.port.TicketCommentRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketHistoryRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketLifecyclePolicy;
+import com.tickets.managementtickets.ticket.application.port.TicketMetricsPort;
 import com.tickets.managementtickets.ticket.application.port.TicketRepositoryPort;
 import com.tickets.managementtickets.ticket.application.service.TicketService;
 import com.tickets.managementtickets.ticket.infrastructure.support.IdempotencyProperties;
@@ -82,7 +84,8 @@ public class ApplicationConfiguration {
         HashingService hashingService,
         CurrentAuthenticatedUserProvider currentUserProvider,
         Clock clock,
-        TransactionRunner transactionRunner
+        TransactionRunner transactionRunner,
+        AuthMetricsPort authMetricsPort
     ) {
         return new AuthService(
             userRepository,
@@ -95,7 +98,8 @@ public class ApplicationConfiguration {
             hashingService,
             currentUserProvider,
             clock,
-            transactionRunner
+            transactionRunner,
+            authMetricsPort
         );
     }
 
@@ -166,7 +170,8 @@ public class ApplicationConfiguration {
         Clock clock,
         IdempotencyPolicy idempotencyPolicy,
         TicketLifecyclePolicy ticketLifecyclePolicy,
-        TransactionRunner transactionRunner
+        TransactionRunner transactionRunner,
+        TicketMetricsPort ticketMetricsPort
     ) {
         return new TicketService(
             ticketRepository,
@@ -184,7 +189,8 @@ public class ApplicationConfiguration {
             clock,
             idempotencyPolicy,
             ticketLifecyclePolicy,
-            transactionRunner
+            transactionRunner,
+            ticketMetricsPort
         );
     }
 }

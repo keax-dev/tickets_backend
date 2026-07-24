@@ -4,6 +4,9 @@ import com.tickets.managementtickets.identity.application.port.CurrentAuthentica
 import com.tickets.managementtickets.notification.application.service.NotificationService;
 import com.tickets.managementtickets.notification.infrastructure.web.dto.NotificationResponse;
 import com.tickets.managementtickets.shared.application.model.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -19,6 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api/v1/notifications")
+@Tag(name = "Notifications", description = "Notification inbox endpoints.")
+@SecurityRequirement(name = "bearerAuth")
 public class NotificationController {
 
     private final NotificationService notificationService;
@@ -30,6 +35,7 @@ public class NotificationController {
     }
 
     @GetMapping
+    @Operation(summary = "List notifications", description = "Returns the paged notification inbox for the authenticated user.")
     public PageResponse<NotificationResponse> list(
         @RequestParam(defaultValue = "0") @PositiveOrZero int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
@@ -40,6 +46,7 @@ public class NotificationController {
     }
 
     @PatchMapping("/{notificationId}/read")
+    @Operation(summary = "Mark one notification as read", description = "Marks a single notification as read for the authenticated recipient.")
     public NotificationResponse markAsRead(@PathVariable String notificationId) {
         return NotificationResponse.from(
             notificationService.markAsRead(currentUserProvider.requireCurrentUser(), notificationId)
@@ -47,6 +54,7 @@ public class NotificationController {
     }
 
     @PatchMapping("/read-all")
+    @Operation(summary = "Mark all notifications as read", description = "Marks every unread notification as read for the authenticated user.")
     public ResponseEntity<Void> markAllAsRead() {
         notificationService.markAllAsRead(currentUserProvider.requireCurrentUser());
         return ResponseEntity.noContent().build();

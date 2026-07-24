@@ -7,6 +7,9 @@ import com.tickets.managementtickets.category.infrastructure.web.dto.CategoryReq
 import com.tickets.managementtickets.category.infrastructure.web.dto.CategoryResponse;
 import com.tickets.managementtickets.category.infrastructure.web.dto.StatusRequest;
 import com.tickets.managementtickets.identity.application.port.CurrentAuthenticatedUserProvider;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -21,6 +24,8 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/categories")
+@Tag(name = "Categories", description = "Category catalog administration endpoints.")
+@SecurityRequirement(name = "bearerAuth")
 public class CategoryController {
 
     private final CategoryService categoryService;
@@ -32,6 +37,7 @@ public class CategoryController {
     }
 
     @GetMapping
+    @Operation(summary = "List categories", description = "Returns the category catalog visible to the authenticated user.")
     public List<CategoryResponse> list() {
         return categoryService.list(currentUserProvider.requireCurrentUser()).stream()
             .map(CategoryResponse::from)
@@ -39,6 +45,7 @@ public class CategoryController {
     }
 
     @PostMapping
+    @Operation(summary = "Create a category", description = "Creates a new ticket category.")
     public CategoryResponse create(@Valid @RequestBody CategoryRequest request) {
         return CategoryResponse.from(
             categoryService.create(
@@ -49,6 +56,7 @@ public class CategoryController {
     }
 
     @PutMapping("/{categoryId}")
+    @Operation(summary = "Update a category", description = "Updates category name or description.")
     public CategoryResponse update(
         @PathVariable String categoryId,
         @Valid @RequestBody CategoryRequest request
@@ -63,6 +71,7 @@ public class CategoryController {
     }
 
     @PatchMapping("/{categoryId}/status")
+    @Operation(summary = "Update category status", description = "Activates or deactivates an existing category.")
     public CategoryResponse updateStatus(
         @PathVariable String categoryId,
         @Valid @RequestBody StatusRequest request

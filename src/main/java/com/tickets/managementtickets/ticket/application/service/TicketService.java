@@ -33,6 +33,7 @@ import com.tickets.managementtickets.ticket.application.port.TicketCodeGenerator
 import com.tickets.managementtickets.ticket.application.port.TicketCommentRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketHistoryRepositoryPort;
 import com.tickets.managementtickets.ticket.application.port.TicketLifecyclePolicy;
+import com.tickets.managementtickets.ticket.application.port.TicketMetricsPort;
 import com.tickets.managementtickets.ticket.application.port.TicketQuery;
 import com.tickets.managementtickets.ticket.application.port.TicketRepositoryPort;
 import com.tickets.managementtickets.ticket.application.query.TicketFilterRequest;
@@ -83,6 +84,7 @@ public class TicketService {
     private final TicketHistoryRecorder historyRecorder;
     private final TicketNotificationDispatcher notificationDispatcher;
     private final TicketIdempotencyHandler idempotencyHandler;
+    private final TicketMetricsPort metricsPort;
 
     public TicketService(
         TicketRepositoryPort ticketRepository,
@@ -101,6 +103,46 @@ public class TicketService {
         IdempotencyPolicy idempotencyPolicy,
         TicketLifecyclePolicy ticketLifecyclePolicy,
         TransactionRunner transactionRunner
+    ) {
+        this(
+            ticketRepository,
+            ticketCommentRepository,
+            ticketHistoryRepository,
+            idempotencyRecordRepository,
+            userRepository,
+            categoryRepository,
+            slaPolicyRepository,
+            notificationRepository,
+            ticketCodeGenerator,
+            authorizationService,
+            hashingService,
+            jsonCodec,
+            clock,
+            idempotencyPolicy,
+            ticketLifecyclePolicy,
+            transactionRunner,
+            TicketMetricsPort.NO_OP
+        );
+    }
+
+    public TicketService(
+        TicketRepositoryPort ticketRepository,
+        TicketCommentRepositoryPort ticketCommentRepository,
+        TicketHistoryRepositoryPort ticketHistoryRepository,
+        IdempotencyRecordRepositoryPort idempotencyRecordRepository,
+        UserRepositoryPort userRepository,
+        CategoryRepositoryPort categoryRepository,
+        SlaPolicyRepositoryPort slaPolicyRepository,
+        NotificationRepositoryPort notificationRepository,
+        TicketCodeGenerator ticketCodeGenerator,
+        AuthorizationService authorizationService,
+        HashingService hashingService,
+        JsonCodec jsonCodec,
+        Clock clock,
+        IdempotencyPolicy idempotencyPolicy,
+        TicketLifecyclePolicy ticketLifecyclePolicy,
+        TransactionRunner transactionRunner,
+        TicketMetricsPort metricsPort
     ) {
         this.ticketRepository = ticketRepository;
         this.ticketCommentRepository = ticketCommentRepository;
@@ -126,6 +168,7 @@ public class TicketService {
             idempotencyPolicy,
             clock
         );
+        this.metricsPort = metricsPort;
     }
 
     public PageResponse<TicketSummaryResponse> list(AuthenticatedUser currentUser, TicketFilterRequest filterRequest) {
@@ -202,6 +245,7 @@ public class TicketService {
 
             historyRecorder.created(ticket.getId(), currentUser.id(), ticket.getCode());
             notificationDispatcher.ticketCreated(ticket);
+            metricsPort.recordTicketCreated(ticket);
 
             TicketDetailResponse response = buildDetailResponse(ticket, currentUser);
             idempotencyHandler.storeCreateResponse(idempotencyKey, currentUser.id(), requestHash, ticket.getId(), response);
@@ -309,6 +353,7 @@ public class TicketService {
             ticket = ticketRepository.save(ticket);
             historyRecorder.resolved(ticket.getId(), currentUser.id(), ticket.getResolutionSummary());
             notificationDispatcher.ticketResolved(ticket);
+            metricsPort.recordTicketResolved(ticket);
             return buildDetailResponse(ticket, currentUser);
         });
     }
@@ -324,6 +369,7 @@ public class TicketService {
             ticket = ticketRepository.save(ticket);
             historyRecorder.closed(ticket.getId(), currentUser.id());
             notificationDispatcher.ticketClosed(ticket);
+            metricsPort.recordTicketClosed(ticket, false);
             return buildDetailResponse(ticket, currentUser);
         });
     }
@@ -353,6 +399,7 @@ public class TicketService {
             ticket.cancel(clock.instant());
             ticket = ticketRepository.save(ticket);
             historyRecorder.cancelled(ticket.getId(), currentUser.id(), request.reason());
+            metricsPort.recordTicketCancelled(ticket);
             return buildDetailResponse(ticket, currentUser);
         });
     }
@@ -434,6 +481,7 @@ public class TicketService {
                     Ticket savedTicket = ticketRepository.save(ticket);
                     historyRecorder.autoClosed(savedTicket.getId(), SYSTEM_ACTOR);
                     notificationDispatcher.ticketAutoClosed(savedTicket);
+                    metricsPort.recordTicketClosed(savedTicket, true);
                 });
         });
     }
@@ -455,6 +503,7 @@ public class TicketService {
             ticket.applyFirstResponseIfMissing(clock.instant());
         }
 
+        metricsPort.recordCommentAdded(visibility);
         historyRecorder.commentAdded(
             ticket.getId(),
             currentUser.id(),
