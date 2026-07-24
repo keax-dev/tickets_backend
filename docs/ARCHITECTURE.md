@@ -1,9 +1,9 @@
 [![Language: English](https://img.shields.io/badge/Language-English-0A66C2?style=for-the-badge)](ARCHITECTURE.md)
-[![Idioma: Español](https://img.shields.io/badge/Idioma-Espa%C3%B1ol-6A1B9A?style=for-the-badge)](ARCHITECTURE.es.md)
+[![Idioma: Espanol](https://img.shields.io/badge/Idioma-Espanol-6A1B9A?style=for-the-badge)](ARCHITECTURE.es.md)
 
 # Architecture Guide
 
-[Back to README](../README.md) | [Volver al README en Espanol](../README.es.md)
+[Volver al README en Espanol](../README.md) | [Back to README in English](../README.en.md)
 
 ## Purpose
 

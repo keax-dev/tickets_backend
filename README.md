@@ -1,24 +1,24 @@
-[![Language: English](https://img.shields.io/badge/Language-English-0A66C2?style=for-the-badge)](README.md)
-[![Idioma: Español](https://img.shields.io/badge/Idioma-Espa%C3%B1ol-6A1B9A?style=for-the-badge)](README.es.md)
+[![Idioma: Espanol](https://img.shields.io/badge/Idioma-Espanol-6A1B9A?style=for-the-badge)](README.md)
+[![Language: English](https://img.shields.io/badge/Language-English-0A66C2?style=for-the-badge)](README.en.md)
 
 # Management Tickets Backend
 
-Spring Boot 4 backend for ticket management, authentication, SLA administration, notifications, catalog management, and dashboard reporting.
+Backend en Spring Boot 4 para gestion de tickets, autenticacion, administracion de SLA, notificaciones, catalogos y reportes de dashboard.
 
 [Architecture Guide (English)](docs/ARCHITECTURE.md) | [Guia de Arquitectura (Espanol)](docs/ARCHITECTURE.es.md)
 
-## Overview
+## Vision General
 
-This project exposes a REST API for a service desk style ticketing system. It supports:
+Este proyecto expone una API REST para un sistema de mesa de ayuda orientado a tickets. Soporta:
 
-- JWT-based authentication with refresh-token rotation
-- Role-based access control for admins, managers, agents, and customers
-- Ticket lifecycle management from creation to closure
-- Ticket comments and ticket history tracking
-- SLA policy administration and ticket dashboard summaries
-- Notifications, categories, observability metrics, and scheduled maintenance
+- Autenticacion basada en JWT con rotacion de refresh token
+- Control de acceso por roles para administradores, managers, agentes y clientes
+- Gestion del ciclo de vida del ticket desde su creacion hasta su cierre
+- Comentarios e historial de tickets
+- Administracion de politicas SLA y resumenes de dashboard
+- Notificaciones, categorias, metricas de observabilidad y mantenimiento programado
 
-## Technology Stack
+## Stack Tecnologico
 
 - Java 21
 - Spring Boot 4.1
@@ -30,57 +30,57 @@ This project exposes a REST API for a service desk style ticketing system. It su
 - Springdoc OpenAPI + Swagger UI
 - Micrometer + Prometheus registry
 - JUnit 5, ArchUnit, Mockito, Testcontainers
-- GitHub Actions for CI
+- GitHub Actions para CI
 
-## Functional Modules
+## Modulos Funcionales
 
-The backend is organized by bounded context:
+El backend esta organizado por bounded contexts:
 
-- `identity` - Authentication, users, roles, permissions, refresh tokens
-- `ticket` - Tickets, comments, history, code generation, idempotency, lifecycle
-- `category` - Ticket categories and status management
-- `sla` - SLA rules by priority
-- `notification` - User notifications and read status updates
-- `dashboard` - Summary and recent activity endpoints
-- `shared` - Cross-cutting exceptions, security helpers, web helpers, transaction ports
-- `observability` - Metrics adapters and gauges
-- `bootstrap` - Application startup, composition root, and scheduled maintenance
+- `identity` - Autenticacion, usuarios, roles, permisos, refresh tokens
+- `ticket` - Tickets, comentarios, historial, generacion de codigos, idempotencia, ciclo de vida
+- `category` - Categorias de ticket y gestion de estado
+- `sla` - Reglas SLA por prioridad
+- `notification` - Notificaciones de usuario y marcacion de lectura
+- `dashboard` - Endpoints de resumen y actividad reciente
+- `shared` - Excepciones compartidas, helpers de seguridad, helpers web y puertos transaccionales
+- `observability` - Adaptadores de metricas y gauges
+- `bootstrap` - Arranque de la aplicacion, composition root y mantenimiento programado
 
-For the architectural rationale behind this structure, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Para entender el por que de esta estructura, revisa [docs/ARCHITECTURE.es.md](docs/ARCHITECTURE.es.md).
 
-## Requirements
+## Requisitos
 
-- Java 21 or higher
-- Maven 3.9 or higher if you do not use the wrapper
+- Java 21 o superior
+- Maven 3.9 o superior si no usas el wrapper
 - MySQL 8.x
-- Docker is optional and only needed to run Testcontainers-based persistence integration tests locally
+- Docker es opcional y solo hace falta para correr localmente las pruebas de integracion de persistencia con Testcontainers
 
-## Configuration
+## Configuracion
 
-The main application configuration lives in [src/main/resources/application.properties](src/main/resources/application.properties).
+La configuracion principal vive en [src/main/resources/application.properties](src/main/resources/application.properties).
 
-### Required Environment Variables
+### Variables de Entorno Requeridas
 
-| Variable | Default | Purpose |
+| Variable | Valor por defecto | Proposito |
 | --- | --- | --- |
-| `JWT_SECRET` | none | Required secret used to sign JWT access tokens |
-| `DB_HOST` | `localhost` | MySQL host |
-| `DB_PORT` | `3306` | MySQL port |
-| `DB_NAME` | `management_tickets` | Database name |
-| `DB_USERNAME` | `root` | Database username |
-| `DB_PASSWORD` | empty | Database password |
-| `SPRING_PROFILES_ACTIVE` | none | Optional Spring profile, usually `local` in development |
+| `JWT_SECRET` | none | Secreto obligatorio para firmar los JWT de acceso |
+| `DB_HOST` | `localhost` | Host de MySQL |
+| `DB_PORT` | `3306` | Puerto de MySQL |
+| `DB_NAME` | `management_tickets` | Nombre de la base de datos |
+| `DB_USERNAME` | `root` | Usuario de base de datos |
+| `DB_PASSWORD` | empty | Contrasena de base de datos |
+| `SPRING_PROFILES_ACTIVE` | none | Perfil opcional de Spring, normalmente `local` en desarrollo |
 
-### Available Profiles
+### Perfiles Disponibles
 
-- `default` - Base application settings
-- `local` - Local developer overrides
-- `test` - Test support properties
-- `prod` - Production-specific actuator exposure overrides
+- `default` - Configuracion base
+- `local` - Ajustes para desarrollo local
+- `test` - Propiedades de soporte para pruebas
+- `prod` - Overrides de produccion para actuator
 
-## Running Locally
+## Ejecucion Local
 
-1. Create the database:
+1. Crea la base de datos:
 
 ```sql
 CREATE DATABASE management_tickets
@@ -88,48 +88,48 @@ CREATE DATABASE management_tickets
   COLLATE utf8mb4_unicode_ci;
 ```
 
-2. Export the JWT secret and optionally the local profile.
+2. Exporta el secreto JWT y opcionalmente activa el perfil local.
 
 PowerShell:
 
 ```powershell
-$env:JWT_SECRET = "replace-with-a-secret-of-at-least-32-characters"
+$env:JWT_SECRET = "reemplaza-por-un-secreto-de-al-menos-32-caracteres"
 $env:SPRING_PROFILES_ACTIVE = "local"
 .\mvnw.cmd spring-boot:run
 ```
 
-macOS or Linux:
+macOS o Linux:
 
 ```bash
-export JWT_SECRET="replace-with-a-secret-of-at-least-32-characters"
+export JWT_SECRET="reemplaza-por-un-secreto-de-al-menos-32-caracteres"
 export SPRING_PROFILES_ACTIVE=local
 ./mvnw spring-boot:run
 ```
 
-3. Open Swagger UI:
+3. Abre Swagger UI:
 
 - `http://localhost:8080/swagger-ui/index.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
 
-Flyway will validate and apply database migrations on startup.
+Flyway validara y aplicara las migraciones al arrancar.
 
-## Authentication Flow
+## Flujo de Autenticacion
 
-- `POST /api/v1/auth/login` Authenticates a user and returns:
-  - A JWT access token in the response body
-  - A rotated refresh token as an HttpOnly cookie
-- `POST /api/v1/auth/refresh` Uses the refresh cookie to issue a new access token
-- `POST /api/v1/auth/logout` Revokes the refresh token and clears the cookie
-- `GET /api/v1/auth/me` Returns the current authenticated user and resolved permissions
+- `POST /api/v1/auth/login` autentica al usuario y devuelve:
+  - un JWT access token en el body
+  - un refresh token rotado como cookie HttpOnly
+- `POST /api/v1/auth/refresh` usa la cookie de refresh para emitir un nuevo access token
+- `POST /api/v1/auth/logout` revoca el refresh token y limpia la cookie
+- `GET /api/v1/auth/me` devuelve el usuario autenticado y sus permisos resueltos
 
-Swagger exposes protected endpoints as part of the API contract. To call them from Swagger UI:
+Swagger muestra tambien los endpoints protegidos porque forman parte del contrato de la API. Para consumirlos desde Swagger UI:
 
-1. Execute `POST /api/v1/auth/login`
-2. Copy the returned `accessToken`
-3. Click `Authorize` in Swagger UI
-4. Paste the token into the `bearerAuth` dialog
+1. Ejecuta `POST /api/v1/auth/login`
+2. Copia el `accessToken` recibido
+3. Haz clic en `Authorize` dentro de Swagger UI
+4. Pega el token en el dialogo `bearerAuth`
 
-## Main API Areas
+## Principales Areas de la API
 
 - `/api/v1/auth`
 - `/api/v1/users`
@@ -139,11 +139,11 @@ Swagger exposes protected endpoints as part of the API contract. To call them fr
 - `/api/v1/notifications`
 - `/api/v1/dashboard`
 
-Swagger is the source of truth for the full request and response contract.
+Swagger es la fuente de verdad para el contrato completo de requests y responses.
 
-## Testing
+## Pruebas
 
-Run unit and architecture tests:
+Ejecutar pruebas unitarias y de arquitectura:
 
 PowerShell:
 
@@ -151,13 +151,13 @@ PowerShell:
 .\mvnw.cmd test
 ```
 
-macOS or Linux:
+macOS o Linux:
 
 ```bash
 ./mvnw test
 ```
 
-Run the full quality gate, including integration tests:
+Ejecutar el quality gate completo, incluyendo pruebas de integracion:
 
 PowerShell:
 
@@ -165,55 +165,55 @@ PowerShell:
 .\mvnw.cmd verify
 ```
 
-macOS or Linux:
+macOS o Linux:
 
 ```bash
 ./mvnw verify
 ```
 
-Notes:
+Notas:
 
-- Web integration tests do not require Docker
-- Persistence integration tests use Testcontainers with MySQL
-- When Docker is not available, those Testcontainers tests are skipped by design
+- Las pruebas de integracion web no necesitan Docker
+- Las pruebas de persistencia usan Testcontainers con MySQL
+- Cuando Docker no esta disponible, esas pruebas se saltan intencionalmente
 
-## Observability
+## Observabilidad
 
-The backend exposes operational endpoints through Spring Boot Actuator:
+El backend expone endpoints operativos mediante Spring Boot Actuator:
 
 - `/actuator/health`
 - `/actuator/info`
 - `/actuator/metrics`
 - `/actuator/prometheus`
 
-The application also:
+La aplicacion tambien:
 
-- Propagates `X-Correlation-Id` across requests and error responses
-- Records ticket and authentication metrics through Micrometer
-- Logs scheduled maintenance execution
+- Propaga `X-Correlation-Id` en requests y respuestas de error
+- Registra metricas de tickets y autenticacion con Micrometer
+- Deja trazas de ejecucion para las tareas de mantenimiento programado
 
-## Scheduled Maintenance
+## Mantenimiento Programado
 
-The scheduler is enabled in the application startup class and currently runs:
+El scheduler esta habilitado desde la clase principal y actualmente ejecuta:
 
-- Hourly purge of expired refresh tokens and idempotency records
-- Daily auto-close of resolved tickets at `02:00` server time
+- Limpieza horaria de refresh tokens expirados y registros de idempotencia
+- Cierre automatico diario de tickets resueltos a las `02:00` de la hora del servidor
 
-## Continuous Integration
+## Integracion Continua
 
-GitHub Actions is configured in [.github/workflows/backend-ci.yml](.github/workflows/backend-ci.yml).
+GitHub Actions esta configurado en [.github/workflows/backend-ci.yml](.github/workflows/backend-ci.yml).
 
-The CI pipeline:
+El pipeline de CI:
 
-- Runs on `push` to `main`
-- Runs on `pull_request` targeting `main`
-- Uses Java 21 on Ubuntu
-- Executes `./mvnw -B -ntp verify`
-- Enforces minimal GitHub permissions with `contents: read`
-- Cancels older in-progress runs for the same workflow and ref
-- Uploads Surefire and Failsafe reports when the build fails
+- Corre en `push` a `main`
+- Corre en `pull_request` hacia `main`
+- Usa Java 21 sobre Ubuntu
+- Ejecuta `./mvnw -B -ntp verify`
+- Define permisos minimos con `contents: read`
+- Cancela ejecuciones antiguas en progreso para el mismo workflow y ref
+- Sube reportes de Surefire y Failsafe cuando falla el build
 
-## Repository Structure
+## Estructura del Repositorio
 
 ```text
 src/
@@ -238,11 +238,13 @@ src/
     java/com/tickets/managementtickets/
       architecture/
       support/
-      ... module tests ...
+      ... pruebas por modulo ...
+README.md
+README.en.md
 ```
 
-## Additional Notes
+## Notas Adicionales
 
-- Database schema changes are managed through Flyway migrations in `src/main/resources/db/migration`
-- Reference data such as default categories and SLA setup is created through migrations
-- Application services remain plain Java classes and are wired from the composition root in `bootstrap/ApplicationConfiguration`
+- Los cambios de esquema de base de datos se gestionan con Flyway en `src/main/resources/db/migration`
+- Los datos de referencia, como categorias por defecto y configuracion inicial de SLA, se crean con migraciones
+- Los application services se mantienen como clases Java puras y se componen desde `bootstrap/ApplicationConfiguration`

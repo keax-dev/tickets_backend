@@ -1,9 +1,9 @@
 [![Language: English](https://img.shields.io/badge/Language-English-0A66C2?style=for-the-badge)](ARCHITECTURE.md)
-[![Idioma: Español](https://img.shields.io/badge/Idioma-Espa%C3%B1ol-6A1B9A?style=for-the-badge)](ARCHITECTURE.es.md)
+[![Idioma: Espanol](https://img.shields.io/badge/Idioma-Espanol-6A1B9A?style=for-the-badge)](ARCHITECTURE.es.md)
 
 # Guia de Arquitectura
 
-[Back to README](../README.md) | [Volver al README en Espanol](../README.es.md)
+[Volver al README en Espanol](../README.md) | [Back to README in English](../README.en.md)
 
 ## Proposito
 
@@ -44,7 +44,7 @@ Cada paquete de primer nivel debajo de `com.tickets.managementtickets` se trata 
 
 ## Por Que Comentarios, Historial, Secuencia e Idempotencia Siguen Dentro de `ticket`
 
-El bounded context `ticket` no solo es dueño de la entidad `Ticket`. Tambien es dueño de:
+El bounded context `ticket` no solo es dueno de la entidad `Ticket`. Tambien es dueno de:
 
 - Comentarios del ticket
 - Historial del ticket
