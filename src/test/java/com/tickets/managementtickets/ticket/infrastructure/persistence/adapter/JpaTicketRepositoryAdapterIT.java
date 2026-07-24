@@ -95,12 +95,12 @@ class JpaTicketRepositoryAdapterIT extends AbstractMySqlContainerIntegrationTest
         saveTicket(ticket("92000000-0000-0000-0000-000000000012", "TCK-2026-991002", "Unassigned", requesterId, null, categoryId, TicketStatus.CREATED, false, false, null));
         saveTicket(ticket("92000000-0000-0000-0000-000000000013", "TCK-2026-991003", "Assigned elsewhere", requesterId, otherAgentId, categoryId, TicketStatus.ASSIGNED, false, false, null));
 
-        // Act: query the support queue visibility for the current agent.
+        // Act: query the support queue visibility for the current agent inside the isolated test category.
         PageResponse<Ticket> result = adapter.findAll(new TicketQuery(
             null,
             null,
             null,
-            null,
+            categoryId,
             null,
             null,
             null,
