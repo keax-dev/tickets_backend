@@ -120,6 +120,37 @@ Si la base de datos esta vacia:
 
 Con eso el sistema queda listo para probarse sin preparar manualmente el esquema.
 
+### Usuarios demo y credenciales
+
+Las migraciones tambien crean usuarios demo listos para autenticacion manual. Todos los usuarios activos comparten la misma contrasena:
+
+```text
+Password123!
+```
+
+Usuarios activos por rol:
+
+| Tipo de usuario | Rol | Usuario / email |
+| --- | --- | --- |
+| Administrador | `ADMIN` | `admin.demo@tickets.local` |
+| Manager de soporte | `SUPPORT_MANAGER` | `manager.demo@tickets.local` |
+| Agente de soporte | `SUPPORT_AGENT` | `agent.alvarez@tickets.local` |
+| Agente de soporte | `SUPPORT_AGENT` | `agent.nunez@tickets.local` |
+| Agente de soporte | `SUPPORT_AGENT` | `agent.ortega@tickets.local` |
+| Cliente | `CUSTOMER` | `customer.finance@tickets.local` |
+| Cliente | `CUSTOMER` | `customer.operations@tickets.local` |
+| Cliente | `CUSTOMER` | `customer.sales@tickets.local` |
+| Cliente | `CUSTOMER` | `customer.hr@tickets.local` |
+| Cliente | `CUSTOMER` | `customer.executive@tickets.local` |
+
+Usuarios adicionales de semilla:
+
+| Tipo | Estado | Usuario / email | Uso |
+| --- | --- | --- | --- |
+| Agente de soporte | Inactivo | `agent.inactive@tickets.local` | Pruebas de login denegado por cuenta inactiva |
+| Cliente | Inactivo | `customer.inactive@tickets.local` | Pruebas de login denegado por cuenta inactiva |
+| Actor tecnico del sistema | Inactivo | `system@tickets.local` | Usuario interno creado para automatizacion del sistema, no para login interactivo |
+
 ### Reiniciar la base desde cero
 
 Si quieres borrar los datos persistidos del stack Docker y forzar una inicializacion limpia:

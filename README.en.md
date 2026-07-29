@@ -120,6 +120,37 @@ If the database is empty:
 
 That leaves the system ready to test without manually preparing the schema.
 
+### Demo users and credentials
+
+The migrations also create demo users ready for manual authentication. All active users share the same password:
+
+```text
+Password123!
+```
+
+Active users by role:
+
+| User type | Role | User / email |
+| --- | --- | --- |
+| Administrator | `ADMIN` | `admin.demo@tickets.local` |
+| Support manager | `SUPPORT_MANAGER` | `manager.demo@tickets.local` |
+| Support agent | `SUPPORT_AGENT` | `agent.alvarez@tickets.local` |
+| Support agent | `SUPPORT_AGENT` | `agent.nunez@tickets.local` |
+| Support agent | `SUPPORT_AGENT` | `agent.ortega@tickets.local` |
+| Customer | `CUSTOMER` | `customer.finance@tickets.local` |
+| Customer | `CUSTOMER` | `customer.operations@tickets.local` |
+| Customer | `CUSTOMER` | `customer.sales@tickets.local` |
+| Customer | `CUSTOMER` | `customer.hr@tickets.local` |
+| Customer | `CUSTOMER` | `customer.executive@tickets.local` |
+
+Additional seeded users:
+
+| Type | Status | User / email | Usage |
+| --- | --- | --- | --- |
+| Support agent | Inactive | `agent.inactive@tickets.local` | For denied-login testing with inactive accounts |
+| Customer | Inactive | `customer.inactive@tickets.local` | For denied-login testing with inactive accounts |
+| Technical system actor | Inactive | `system@tickets.local` | Internal automation user, not intended for interactive sign-in |
+
 ### Reset the database from scratch
 
 If you want to remove the persisted Docker data and force a clean initialization:
