@@ -17,6 +17,7 @@ Este proyecto expone una API REST para un sistema de mesa de ayuda orientado a t
 - Comentarios e historial de tickets
 - Administracion de politicas SLA y resumenes de dashboard
 - Notificaciones, categorias, metricas de observabilidad y mantenimiento programado
+- Arranque local dentro de Docker Compose junto con MySQL y el frontend
 
 ## Stack Tecnologico
 
@@ -30,6 +31,7 @@ Este proyecto expone una API REST para un sistema de mesa de ayuda orientado a t
 - Springdoc OpenAPI + Swagger UI
 - Micrometer + Prometheus registry
 - JUnit 5, ArchUnit, Mockito, Testcontainers
+- Docker
 - GitHub Actions para CI
 
 ## Modulos Funcionales
@@ -52,14 +54,16 @@ Para entender el por que de esta estructura, revisa [docs/ARCHITECTURE.es.md](do
 
 - Java 21 o superior
 - Maven 3.9 o superior si no usas el wrapper
-- MySQL 8.x
-- Docker es opcional y solo hace falta para correr localmente las pruebas de integracion de persistencia con Testcontainers
+- MySQL 8.x si vas a correr el backend fuera de Docker Compose
+- Docker Desktop o Docker Engine si vas a usar el stack completo con Compose o quieres ejecutar pruebas de persistencia con Testcontainers
 
 ## Configuracion
 
 La configuracion principal vive en [src/main/resources/application.properties](src/main/resources/application.properties).
 
-### Variables de Entorno Requeridas
+Este backend usa un **solo** archivo `application.properties` para la configuracion principal. Los valores sensibles y dependientes del entorno se inyectan por variables de entorno.
+
+### Variables de Entorno Relevantes
 
 | Variable | Valor por defecto | Proposito |
 | --- | --- | --- |
@@ -68,17 +72,64 @@ La configuracion principal vive en [src/main/resources/application.properties](s
 | `DB_PORT` | `3306` | Puerto de MySQL |
 | `DB_NAME` | `management_tickets` | Nombre de la base de datos |
 | `DB_USERNAME` | `root` | Usuario de base de datos |
-| `DB_PASSWORD` | empty | Contrasena de base de datos |
-| `SPRING_PROFILES_ACTIVE` | none | Perfil opcional de Spring, normalmente `local` en desarrollo |
+| `DB_PASSWORD` | none | Contrasena de base de datos |
+| `APP_SECURITY_ALLOWED_ORIGIN_1` | `http://localhost:4200` | Primer origen permitido por CORS |
+| `APP_SECURITY_ALLOWED_ORIGIN_2` | `http://127.0.0.1:4200` | Segundo origen permitido por CORS |
+| `APP_SECURITY_REFRESH_COOKIE_SECURE` | `false` | Define si la cookie refresh exige HTTPS |
 
-### Perfiles Disponibles
+## Arranque rapido con Docker Compose
 
-- `default` - Configuracion base
-- `local` - Ajustes para desarrollo local
-- `test` - Propiedades de soporte para pruebas
-- `prod` - Overrides de produccion para actuator
+El flujo recomendado para probar el sistema completo vive en el repositorio `tickets-frontend`, porque ahi esta el `docker-compose.yml` que orquesta:
 
-## Ejecucion Local
+- MySQL
+- este backend
+- el frontend Angular servido con Nginx
+
+### Estructura esperada
+
+```text
+Proyectos/
+  tickets-frontend/
+  tickets-backend/
+```
+
+### Pasos
+
+1. Clona ambos repositorios como carpetas hermanas.
+2. En `tickets-frontend`, crea `.env` a partir de `.env.example`.
+3. Desde `tickets-frontend`, ejecuta:
+
+```powershell
+docker compose up --build
+```
+
+### URLs utiles una vez levantado
+
+- Backend API: `http://localhost:8080`
+- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+- Frontend: `http://localhost:4200`
+
+### Que ocurre en el primer arranque
+
+Si la base de datos esta vacia:
+
+- Flyway valida y aplica las migraciones
+- se crean tablas y restricciones
+- se insertan datos de referencia como categorias y configuracion base de SLA
+
+Con eso el sistema queda listo para probarse sin preparar manualmente el esquema.
+
+### Reiniciar la base desde cero
+
+Si quieres borrar los datos persistidos del stack Docker y forzar una inicializacion limpia:
+
+```powershell
+docker compose down -v
+docker compose up --build
+```
+
+## Ejecucion Local del Backend sin Docker Compose
 
 1. Crea la base de datos:
 
@@ -88,13 +139,17 @@ CREATE DATABASE management_tickets
   COLLATE utf8mb4_unicode_ci;
 ```
 
-2. Exporta el secreto JWT y opcionalmente activa el perfil local.
+2. Exporta las variables minimas necesarias.
 
 PowerShell:
 
 ```powershell
 $env:JWT_SECRET = "reemplaza-por-un-secreto-de-al-menos-32-caracteres"
-$env:SPRING_PROFILES_ACTIVE = "local"
+$env:DB_HOST = "localhost"
+$env:DB_PORT = "3306"
+$env:DB_NAME = "management_tickets"
+$env:DB_USERNAME = "root"
+$env:DB_PASSWORD = "reemplaza-por-tu-password"
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -102,7 +157,11 @@ macOS o Linux:
 
 ```bash
 export JWT_SECRET="reemplaza-por-un-secreto-de-al-menos-32-caracteres"
-export SPRING_PROFILES_ACTIVE=local
+export DB_HOST=localhost
+export DB_PORT=3306
+export DB_NAME=management_tickets
+export DB_USERNAME=root
+export DB_PASSWORD="replace-with-your-password"
 ./mvnw spring-boot:run
 ```
 
@@ -231,9 +290,6 @@ src/
     resources/
       db/migration/
       application.properties
-      application-local.properties
-      application-test.properties
-      application-prod.properties
   test/
     java/com/tickets/managementtickets/
       architecture/
@@ -241,10 +297,12 @@ src/
       ... pruebas por modulo ...
 README.md
 README.en.md
+Dockerfile
 ```
 
 ## Notas Adicionales
 
 - Los cambios de esquema de base de datos se gestionan con Flyway en `src/main/resources/db/migration`
 - Los datos de referencia, como categorias por defecto y configuracion inicial de SLA, se crean con migraciones
+- El `Dockerfile` del backend compila el proyecto con Maven y luego ejecuta el `.jar` sobre una imagen JRE mas ligera
 - Los application services se mantienen como clases Java puras y se componen desde `bootstrap/ApplicationConfiguration`

@@ -17,6 +17,7 @@ This project exposes a REST API for a service desk style ticketing system. It su
 - Ticket comments and ticket history tracking
 - SLA policy administration and ticket dashboard summaries
 - Notifications, categories, observability metrics, and scheduled maintenance
+- Local startup inside Docker Compose together with MySQL and the frontend
 
 ## Technology Stack
 
@@ -30,6 +31,7 @@ This project exposes a REST API for a service desk style ticketing system. It su
 - Springdoc OpenAPI + Swagger UI
 - Micrometer + Prometheus registry
 - JUnit 5, ArchUnit, Mockito, Testcontainers
+- Docker
 - GitHub Actions for CI
 
 ## Functional Modules
@@ -52,14 +54,16 @@ For the architectural rationale behind this structure, see [docs/ARCHITECTURE.md
 
 - Java 21 or higher
 - Maven 3.9 or higher if you do not use the wrapper
-- MySQL 8.x
-- Docker is optional and only needed to run Testcontainers-based persistence integration tests locally
+- MySQL 8.x if you want to run the backend outside Docker Compose
+- Docker Desktop or Docker Engine if you want to use the full Compose stack or run Testcontainers-based persistence tests locally
 
 ## Configuration
 
 The main application configuration lives in [src/main/resources/application.properties](src/main/resources/application.properties).
 
-### Required Environment Variables
+This backend uses a **single** `application.properties` file for the main runtime configuration. Sensitive and environment-specific values are injected through environment variables.
+
+### Relevant Environment Variables
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -68,17 +72,64 @@ The main application configuration lives in [src/main/resources/application.prop
 | `DB_PORT` | `3306` | MySQL port |
 | `DB_NAME` | `management_tickets` | Database name |
 | `DB_USERNAME` | `root` | Database username |
-| `DB_PASSWORD` | empty | Database password |
-| `SPRING_PROFILES_ACTIVE` | none | Optional Spring profile, usually `local` in development |
+| `DB_PASSWORD` | none | Database password |
+| `APP_SECURITY_ALLOWED_ORIGIN_1` | `http://localhost:4200` | First allowed CORS origin |
+| `APP_SECURITY_ALLOWED_ORIGIN_2` | `http://127.0.0.1:4200` | Second allowed CORS origin |
+| `APP_SECURITY_REFRESH_COOKIE_SECURE` | `false` | Whether the refresh cookie requires HTTPS |
 
-### Available Profiles
+## Quick Start with Docker Compose
 
-- `default` - Base application settings
-- `local` - Local developer overrides
-- `test` - Test support properties
-- `prod` - Production-specific actuator exposure overrides
+The recommended full-system workflow lives in the `tickets-frontend` repository, because that is where `docker-compose.yml` orchestrates:
 
-## Running Locally
+- MySQL
+- this backend
+- the Angular frontend served through Nginx
+
+### Expected layout
+
+```text
+Projects/
+  tickets-frontend/
+  tickets-backend/
+```
+
+### Steps
+
+1. Clone both repositories as sibling folders.
+2. In `tickets-frontend`, create `.env` from `.env.example`.
+3. From `tickets-frontend`, run:
+
+```powershell
+docker compose up --build
+```
+
+### Useful URLs after startup
+
+- Backend API: `http://localhost:8080`
+- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+- Frontend: `http://localhost:4200`
+
+### What happens on first startup
+
+If the database is empty:
+
+- Flyway validates and applies migrations
+- tables and constraints are created
+- reference data such as categories and baseline SLA configuration is inserted
+
+That leaves the system ready to test without manually preparing the schema.
+
+### Reset the database from scratch
+
+If you want to remove the persisted Docker data and force a clean initialization:
+
+```powershell
+docker compose down -v
+docker compose up --build
+```
+
+## Running the Backend Locally Without Docker Compose
 
 1. Create the database:
 
@@ -88,13 +139,17 @@ CREATE DATABASE management_tickets
   COLLATE utf8mb4_unicode_ci;
 ```
 
-2. Export the JWT secret and optionally the local profile.
+2. Export the minimum required variables.
 
 PowerShell:
 
 ```powershell
 $env:JWT_SECRET = "replace-with-a-secret-of-at-least-32-characters"
-$env:SPRING_PROFILES_ACTIVE = "local"
+$env:DB_HOST = "localhost"
+$env:DB_PORT = "3306"
+$env:DB_NAME = "management_tickets"
+$env:DB_USERNAME = "root"
+$env:DB_PASSWORD = "replace-with-your-password"
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -102,7 +157,11 @@ macOS or Linux:
 
 ```bash
 export JWT_SECRET="replace-with-a-secret-of-at-least-32-characters"
-export SPRING_PROFILES_ACTIVE=local
+export DB_HOST=localhost
+export DB_PORT=3306
+export DB_NAME=management_tickets
+export DB_USERNAME=root
+export DB_PASSWORD="replace-with-your-password"
 ./mvnw spring-boot:run
 ```
 
@@ -111,7 +170,7 @@ export SPRING_PROFILES_ACTIVE=local
 - `http://localhost:8080/swagger-ui/index.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
 
-Flyway will validate and apply database migrations on startup.
+Flyway validates and applies migrations at startup.
 
 ## Authentication Flow
 
@@ -231,9 +290,6 @@ src/
     resources/
       db/migration/
       application.properties
-      application-local.properties
-      application-test.properties
-      application-prod.properties
   test/
     java/com/tickets/managementtickets/
       architecture/
@@ -241,10 +297,12 @@ src/
       ... module tests ...
 README.md
 README.en.md
+Dockerfile
 ```
 
 ## Additional Notes
 
 - Database schema changes are managed through Flyway migrations in `src/main/resources/db/migration`
-- Reference data such as default categories and SLA setup is created through migrations
+- Reference data such as default categories and baseline SLA setup is created through migrations
+- The backend `Dockerfile` builds the project with Maven and then runs the `.jar` on a lighter JRE image
 - Application services remain plain Java classes and are wired from the composition root in `bootstrap/ApplicationConfiguration`

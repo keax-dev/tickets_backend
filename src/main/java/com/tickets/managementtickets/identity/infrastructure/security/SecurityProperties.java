@@ -30,6 +30,8 @@ public class SecurityProperties {
     @NotBlank
     private String refreshCookieName;
 
+    private boolean refreshCookieSecure;
+
     @Positive
     private int maxFailedLoginAttempts;
 
@@ -83,6 +85,14 @@ public class SecurityProperties {
 
     public void setRefreshCookieName(String refreshCookieName) {
         this.refreshCookieName = refreshCookieName;
+    }
+
+    public boolean isRefreshCookieSecure() {
+        return refreshCookieSecure;
+    }
+
+    public void setRefreshCookieSecure(boolean refreshCookieSecure) {
+        this.refreshCookieSecure = refreshCookieSecure;
     }
 
     public int getMaxFailedLoginAttempts() {
